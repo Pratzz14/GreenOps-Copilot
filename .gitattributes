@@ -1,0 +1,2 @@
+# Preserve raw input bytes and official template hashes across platforms.
+/data/*.csv -text

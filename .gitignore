@@ -1,0 +1,33 @@
+# Local planning
+/plan.md
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# JavaScript dependencies and build output
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Generated local artifacts
+/outputs/*
+!/outputs/.gitkeep
+
+# Editor and OS files
+.idea/
+.vscode/
+Thumbs.db
+.DS_Store
+
+# Local runtime log and nested upstream Git metadata
+/debug.log
+/sprintd-basel-green-ai-data/.git/

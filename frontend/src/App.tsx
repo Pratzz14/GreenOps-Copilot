@@ -1,0 +1,2 @@
+import Analysis from './Analysis';
+export default function App(){return <main><header className="app-header"><a className="brand" href="#"><span className="brand-mark" aria-hidden="true">G</span>GreenOps <span className="muted">Copilot</span></a><nav aria-label="Page sections"><a href="#catalog">Source catalog</a><a href="#explorer">Explore data</a></nav><span className="local-badge">LOCAL ANALYSIS</span></header><Analysis/><footer>Sample data ALTYCA, sprintd Basel 2026 · Synthetic usage and volume data · Official baseline Sep 2025 – Aug 2026</footer></main>;}
