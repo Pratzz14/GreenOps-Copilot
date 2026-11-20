@@ -16,7 +16,7 @@ from src.source_specs import SPECS, CANONICAL_FIELDS
 
 
 def records(name, overrides):
-    fields, source = read_csv(ROOT/'data'/name)
+    fields, source = read_csv(ROOT/'data'/'bronze'/name)
     result=[]
     for n, changes in enumerate(overrides,2):
         raw={**source[0],**changes}
@@ -30,9 +30,9 @@ def records(name, overrides):
 
 @pytest.fixture(scope='module')
 def real_report():
-    before={n:hashlib.sha256((ROOT/'data'/n).read_bytes()).hexdigest() for n in (*CORE_FILES,*TEMPLATES)}
+    before={n:hashlib.sha256((ROOT/'data'/'bronze'/n).read_bytes()).hexdigest() for n in (*CORE_FILES,*TEMPLATES)}
     value=profile(ROOT/'data')
-    assert before=={n:hashlib.sha256((ROOT/'data'/n).read_bytes()).hexdigest() for n in before}
+    assert before=={n:hashlib.sha256((ROOT/'data'/'bronze'/n).read_bytes()).hexdigest() for n in before}
     return value
 
 
@@ -138,7 +138,7 @@ def test_join_ambiguity_unmatched_fx_and_missing_departments():
 @pytest.fixture()
 def saved_report(tmp_path,real_report):
     data=tmp_path/'data'; data.mkdir()
-    for name in (*CORE_FILES,*TEMPLATES): (data/name).write_bytes((ROOT/'data'/name).read_bytes())
+    for name in (*CORE_FILES,*TEMPLATES): (data/name).write_bytes((ROOT/'data'/'bronze'/name).read_bytes())
     out=tmp_path/'outputs';snapshot(data,out)
     (out/'data_quality.json').write_text(json.dumps(real_report),encoding='utf-8')
     return out

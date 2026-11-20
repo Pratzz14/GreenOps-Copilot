@@ -31,3 +31,7 @@ Thumbs.db
 # Local runtime log and nested upstream Git metadata
 /debug.log
 /sprintd-basel-green-ai-data/.git/
+
+# Generated Silver layer
+/data/silver/*
+!/data/silver/.gitkeep

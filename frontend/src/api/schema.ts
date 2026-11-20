@@ -174,6 +174,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/silver": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Overview */
+        get: operations["overview_api_v1_silver_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/silver/tables/{table}/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Table Profile */
+        get: operations["table_profile_api_v1_silver_tables__table__profile_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/silver/tables/{table}/rows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Table Rows */
+        get: operations["table_rows_api_v1_silver_tables__table__rows_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/silver/records/{record_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Record Lineage */
+        get: operations["record_lineage_api_v1_silver_records__record_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/silver/issues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Unresolved */
+        get: operations["unresolved_api_v1_silver_issues_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/silver/reconciliation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Financial */
+        get: operations["financial_api_v1_silver_reconciliation_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -199,6 +301,25 @@ export interface components {
             label: string;
             /** Count */
             count: number;
+        };
+        /** CatalogEntry */
+        CatalogEntry: {
+            /** Table */
+            table: string;
+            /** Purpose */
+            purpose: string;
+            /** Total */
+            total: number;
+            /** Accepted */
+            accepted: number;
+            /** Issue Count */
+            issue_count: number;
+            /** Limitations */
+            limitations: string[];
+            /** Transformations */
+            transformations: {
+                [key: string]: number;
+            };
         };
         /** ColumnProfile */
         ColumnProfile: {
@@ -378,6 +499,23 @@ export interface components {
             /** Notes */
             notes: string;
         };
+        /** Lineage */
+        Lineage: {
+            /** Version */
+            version: string;
+            /** Record */
+            record: {
+                [key: string]: string | number | boolean | null;
+            };
+            /** Changes */
+            changes: {
+                [key: string]: string | number | boolean | null;
+            }[];
+            /** Issues */
+            issues: {
+                [key: string]: string | number | boolean | null;
+            }[];
+        };
         /** Mapping */
         Mapping: {
             /** Source */
@@ -412,6 +550,21 @@ export interface components {
             cost: components["schemas"]["Measurement"];
             energy: components["schemas"]["Measurement"];
             emissions: components["schemas"]["Measurement"];
+        };
+        /** Page */
+        Page: {
+            /** Version */
+            version: string;
+            /** Total */
+            total: number;
+            /** Offset */
+            offset: number;
+            /** Limit */
+            limit: number;
+            /** Items */
+            items: {
+                [key: string]: string | number | boolean | null;
+            }[];
         };
         /** Period */
         Period: {
@@ -495,6 +648,46 @@ export interface components {
             /** Period End */
             period_end: string;
         };
+        /** SilverOverview */
+        SilverOverview: {
+            /** Version */
+            version: string;
+            /** Snapshot Id */
+            snapshot_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "Ready" | "Ready with unresolved issues";
+            /** Tables */
+            tables: components["schemas"]["CatalogEntry"][];
+            /** Accepted */
+            accepted: number;
+            /** Duplicates */
+            duplicates: number;
+            /** Review */
+            review: number;
+            /** Quarantined */
+            quarantined: number;
+            /** Issues */
+            issues: number;
+            /** Issue Codes */
+            issue_codes: string[];
+            /** Field Changes */
+            field_changes: number;
+            /** Rules */
+            rules: {
+                [key: string]: number;
+            };
+            /** Baseline Start */
+            baseline_start: string;
+            /** Baseline End */
+            baseline_end: string;
+            /** Recorded Cost Chf */
+            recorded_cost_chf: string;
+            /** Coverage Status */
+            coverage_status: string;
+        };
         /** SourceDetail */
         SourceDetail: {
             /** Report Id */
@@ -541,6 +734,43 @@ export interface components {
             date_coverage: components["schemas"]["Coverage"] | null;
             /** Gap Count */
             gap_count: number;
+        };
+        /** TablePage */
+        TablePage: {
+            /** Version */
+            version: string;
+            /** Total */
+            total: number;
+            /** Offset */
+            offset: number;
+            /** Limit */
+            limit: number;
+            /** Items */
+            items: {
+                [key: string]: string | number | boolean | null;
+            }[];
+            /** Table */
+            table: string;
+            /** Columns */
+            columns: {
+                [key: string]: string;
+            };
+        };
+        /** TableProfile */
+        TableProfile: {
+            /** Version */
+            version: string;
+            /** Table */
+            table: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "full" | "baseline";
+            /** Items */
+            items: {
+                [key: string]: string | number | boolean | null;
+            }[];
         };
         /** TagProfile */
         TagProfile: {
@@ -1029,6 +1259,199 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    overview_api_v1_silver_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SilverOverview"];
+                };
+            };
+        };
+    };
+    table_profile_api_v1_silver_tables__table__profile_get: {
+        parameters: {
+            query?: {
+                scope?: "full" | "baseline";
+                version?: string | null;
+            };
+            header?: never;
+            path: {
+                table: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TableProfile"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    table_rows_api_v1_silver_tables__table__rows_get: {
+        parameters: {
+            query?: {
+                scope?: "full" | "baseline";
+                status?: "accepted" | "review" | "duplicate" | "quarantined" | "all";
+                offset?: number;
+                limit?: number;
+                version?: string | null;
+            };
+            header?: never;
+            path: {
+                table: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TablePage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    record_lineage_api_v1_silver_records__record_id__get: {
+        parameters: {
+            query?: {
+                version?: string | null;
+            };
+            header?: never;
+            path: {
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Lineage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unresolved_api_v1_silver_issues_get: {
+        parameters: {
+            query?: {
+                source?: string | null;
+                code?: string | null;
+                offset?: number;
+                limit?: number;
+                version?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    financial_api_v1_silver_reconciliation_get: {
+        parameters: {
+            query?: {
+                dimension?: "total" | "source_file" | "provider" | "reporting_month" | "reporting_department" | "currency";
+                offset?: number;
+                limit?: number;
+                version?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

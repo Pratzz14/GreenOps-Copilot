@@ -1,14 +1,12 @@
-import { useRef, useState, type KeyboardEvent } from 'react';
+import { lazy, Suspense, useRef, useState, type KeyboardEvent } from 'react';
 import Analysis from './Analysis';
+
+const Silver = lazy(() => import('./Silver'));
 
 const layers = ['Bronze', 'Silver', 'Gold'] as const;
 type Layer = (typeof layers)[number];
 
 const placeholders = {
-  Silver: {
-    title: 'Cleaned and connected data.',
-    description: 'Silver will standardize identifiers, resolve mappings and reconcile costs.',
-  },
   Gold: {
     title: 'Business insights and decisions.',
     description: 'Gold will contain spending summaries, energy and carbon estimates, and safe savings recommendations.',
@@ -49,7 +47,9 @@ export default function App() {
       </div>
       {layers.map(name => (
         <div key={name} id={`layer-${name}`} role="tabpanel" aria-labelledby={`tab-${name}`} hidden={layer !== name} tabIndex={0}>
-          {name === 'Bronze' ? <Analysis active={layer === name} /> : (
+          {name === 'Bronze' ? <Analysis active={layer === name} /> : name === 'Silver' ? (
+            layer === name && <Suspense fallback={<p role="status">Loading Silver…</p>}><Silver /></Suspense>
+          ) : (
             <section className="analysis-intro">
               <div>
                 <p className="layer-status">Not built yet</p>

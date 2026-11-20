@@ -10,7 +10,7 @@ from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from src.ingest import CORE_FILES, TEMPLATES, ROOT, snapshot
+from src.ingest import CORE_FILES, TEMPLATES, ROOT, bronze_directory, snapshot
 from src.source_specs import SPECS, canonical_mapping
 
 START, END = date(2025, 9, 1), date(2026, 8, 31)
@@ -262,6 +262,7 @@ def assess_joins(name, records, tables):
 
 
 def profile(data):
+    data = bronze_directory(data)
     tables={}; inputs=[]
     for name in (*CORE_FILES,*TEMPLATES): inputs.append({'name':name,'sha256':hashlib.sha256((data/name).read_bytes()).hexdigest()})
     snapshot_id=hashlib.sha256(json.dumps(inputs,sort_keys=True).encode()).hexdigest()

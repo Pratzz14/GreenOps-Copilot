@@ -1,3 +1,4 @@
+import { CatalogRow } from './LayerOverview';
 import type { QualityOverview } from './api/quality';
 
 type SourceDescription = {
@@ -23,19 +24,27 @@ const sourceCatalog = [
 ] as const satisfies readonly SourceDescription[];
 
 export function SourceCatalog({ sources }: { sources: QualityOverview['sources'] }) {
-  const counts = new Map(sources.map(source => [source.name, source.rows]));
+  const profiles = new Map(sources.map(source => [source.name, source]));
   return (
-    <section id="catalog" className="panel catalog" aria-labelledby="catalog-heading">
-      <h2 id="catalog-heading">Source catalog</h2>
-      <ul className="catalog-list">
-        {sourceCatalog.map(({ file, row, relevance }) => (
-          <li key={file}>
-            <strong>{file}</strong>
-            <span>{row}</span>
-            <span>{relevance}</span>
-            <span className="catalog-count">{counts.has(file) ? counts.get(file)?.toLocaleString('en-US') + ' records' : 'Count unavailable'}</span>
-          </li>
-        ))}
+    <section id="catalog" aria-label="Source catalog">
+      <ul className="layer-catalog">
+        {sourceCatalog.map(({ file, row, relevance }) => {
+          const profile = profiles.get(file);
+          const issues = Object.entries(profile?.issue_counts ?? {});
+          return (
+            <CatalogRow key={file} name={file}
+              records={profile ? `${profile.rows.toLocaleString('en-US')} records` : 'Count unavailable'}
+              findings={profile ? (issues.length ? `${issues.length} issue types` : 'No issues flagged') : 'Issues unavailable'}>
+              <p>{row} {relevance}</p>
+              <h3>Issues found</h3>
+              {issues.length ? <dl className="catalog-findings">
+                {issues.map(([category, count]) => <div key={category}>
+                  <dt>{category.replaceAll('_', ' ')}</dt><dd>{count.toLocaleString('en-US')}</dd>
+                </div>)}
+              </dl> : <p>{profile ? 'No issues flagged.' : 'Source issue counts are unavailable.'}</p>}
+            </CatalogRow>
+          );
+        })}
       </ul>
     </section>
   );

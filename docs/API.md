@@ -78,3 +78,24 @@ canonical mappings. Ordinary GETs use memory and do not reopen CSVs or run ETL.
 Source updates take effect only after regenerating the snapshot/report and
 restarting the service. `/health.data_ready` remains false and calculation
 routes remain 503 until later phases produce a calculated run.
+
+## Silver exploration
+
+All successful responses carry the loaded Silver version. Send the overview's
+`version` with subsequent calls for consistency. A stale version returns 409,
+invalid filters return 422, unknown catalog tables or record IDs return 404,
+and absent or invalid artifacts return 503.
+
+| GET path (under `/api/v1/silver`) | Filters and data |
+| --- | --- |
+| `/` (use `/api/v1/silver` without a trailing slash) | Build status, snapshot, catalog, audit counts and financial coverage |
+| `/tables/{table}/rows` | `scope=full\|baseline`, `status=accepted\|review\|duplicate\|quarantined\|all`, offset and limit |
+| `/tables/{table}/profile` | Source table, scope, column completeness, observations, distributions and Bronze comparisons |
+| `/records/{record_id}` | Cleaned record plus Bronze reference, transformation history, evidence and issues |
+| `/issues` | Optional source table and issue code, offset and limit |
+| `/reconciliation` | Dimension (total, source_file, provider, reporting_month, reporting_department, currency), offset and limit |
+
+Money and decimal measurements are JSON strings, preserving CSV precision.
+Null numeric cells are JSON null. The records API uses the logical Bronze
+record number (the header is record 1). The startup loader validates and reads
+the published version once. Requests perform no transformations.

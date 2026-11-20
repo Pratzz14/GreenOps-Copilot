@@ -16,8 +16,15 @@ CORE_FILES = (
 TEMPLATES = ("template_baseline_and_assumptions.csv", "template_measures_package.csv")
 
 
+def bronze_directory(data: Path) -> Path:
+    """Accept either a layered data directory or a flat external export."""
+    bronze = data / "bronze"
+    return bronze if bronze.is_dir() else data
+
+
 def snapshot(data: Path, out: Path) -> dict:
     """Hash only the allowlisted P0 files; this is not a calculated run."""
+    data = bronze_directory(data)
     files = []
     for name in (*CORE_FILES, *TEMPLATES):
         content = (data / name).read_bytes()

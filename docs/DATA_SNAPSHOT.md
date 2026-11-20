@@ -4,7 +4,7 @@
 - Source: https://github.com/Fa-Bee/sprintd-basel-green-ai-data
 - Upstream commit: 30c476fb4932877744643c282e022b5c056f444c
 - Local relocation date: 2026-11-20 (Europe/Berlin).
-- Runtime input root: `data/`.
+- Runtime input root: `data/bronze/`.
 - Moved, not copied: 13 core source CSVs and two official submission templates.
 - Every moved file matched its SHA-256 before and after relocation; contents are unchanged.
 - The 15 bonus files under `sprintd-basel-green-ai-data/extra/` were left in place and their hashes were verified unchanged.
@@ -12,7 +12,7 @@
 - The upstream working tree will report the moved CSV paths as deleted; this is the intentional relocation. No upstream Git commit was created.
 - Treat inputs as read-only; generated artifacts belong in `outputs/`.
 
-| File in data/ | Role | SHA-256 |
+| File in data/bronze/ | Role | SHA-256 |
 |---|---|---|
 | ai_subscriptions.csv | Core source | e97515c02392c8aa99927fd2c36d59b7dd47106b70f7cedb48a29b3eff6f4f9f |
 | ai_usage.csv | Core source | 9504ac11928543bdda384d338966fad32ad7c09b97a54e667a9f22ee60762011 |

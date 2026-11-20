@@ -1,6 +1,7 @@
 import {lazy,Suspense,useState,type ReactNode} from 'react';
 
 import { SourceCatalog } from './SourceCatalog';
+import { LayerDisclosure, LayerSummary } from './LayerOverview';
 
 import {useQuery} from '@tanstack/react-query';
 
@@ -44,25 +45,39 @@ export default function Analysis({ active }: { active: boolean }) {
     queryFn: ({ signal }) => readQuality<QualityOverview>('?scope=full', signal),
   });
 
+  const data = full.data;
+  const sources = data?.sources ?? [];
+  const rows = sources.reduce((total, source) => total + source.rows, 0);
+  const flagged = sources.filter(source => Object.keys(source.issue_counts).length > 0).length;
+
   return (
-    <>
-      <section className="analysis-intro">
-        <div>
-          <h1>Original source exports, preserved unchanged.</h1>
-          <p className="lead">Profiling is complete. Data cleaning and reconciliation happen in Silver.</p>
-        </div>
-      </section>
-      {full.data ? (
+    <div className="layer-dashboard">
+      <header className="layer-heading">
+        <h1>Bronze overview</h1>
+        <p>Original source files and the data quality checks run on them.</p>
+      </header>
+      {data ? (
         <>
-          <SourceCatalog sources={full.data.sources} />
-          <Exploration full={full.data} active={active} />
+          <LayerSummary label="Bronze overview metrics" metrics={[
+            { label: 'Source files', value: fmt(sources.length) },
+            { label: 'Original records', value: fmt(rows) },
+            { label: 'Sources with findings', value: fmt(flagged) },
+          ]} />
+          <div className="layer-actions">
+            <LayerDisclosure title="Browse source files" description="See what each file contains and which issues were flagged.">
+              {() => <SourceCatalog sources={sources} />}
+            </LayerDisclosure>
+            <LayerDisclosure title="Explore data quality" description="Check missing data, duplicate candidates and date coverage.">
+              {open => <Exploration full={data} active={active && open} />}
+            </LayerDisclosure>
+          </div>
         </>
       ) : full.isError ? (
         <ErrorPanel message={full.error.message} retry={() => void full.refetch()} />
       ) : (
         <p className="loading" role="status">Loading the source catalog…</p>
       )}
-    </>
+    </div>
   );
 }
 
@@ -103,8 +118,7 @@ function Exploration({ full, active }: { full: QualityOverview; active: boolean 
 
  return <>
 
- <section className="exploration" aria-labelledby="exploration-heading">
- <h2 id="exploration-heading">Exploration completed</h2>
+ <section className="exploration" aria-label="Bronze data quality analysis">
 
  <div className="analysis-toolbar"><div className="segmented" aria-label="Analysis period">{(['full','baseline'] as const).map(s=><button key={s} aria-pressed={scope===s} onClick={()=>{setScope(s);setOffset(0);setMetric('');setUnit('');setIssueCode('');}}>{s==='full'?'Full exports':'Baseline period'}</button>)}</div><p>{scope==='full'?'All exported records':`${full.baseline.start} – ${full.baseline.end}`} <span className="muted">· raw records retained</span></p></div>
 
@@ -113,8 +127,6 @@ function Exploration({ full, active }: { full: QualityOverview; active: boolean 
    : <p className="loading" role="status">Loading baseline exploration…</p>)}
  <div hidden={!data}>
  <section className="stats" aria-label="Analysis summary">{[{value:fmt(sources.length),title:'Sources profiled',note:'Exports checked for coverage and quality'},{value:fmt(totalRows),title:'Records inspected',note:scope==='baseline'?'Includes overlapping weeks and snapshot context':'Across the full source exports'},{value:fmt(missing),title:'Missing data cells',note:'Excludes expected optional / non-applicable blanks'},{value:fmt(duplicates),title:'Duplicate candidates',note:'Excess identical rows · none removed'}].map(s=><article key={s.title}><p>{s.title}</p><strong>{s.value}</strong><small>{s.note}</small></article>)}</section>
-
- <div className="notice"><span aria-hidden="true">ⓘ</span><p>This is exploratory analysis. Missing values are unknown. Monitoring is separate from billed costs; CHF, energy, carbon and savings calculations come in later phases.</p></div>
 
  <div className="analysis-sections">
 

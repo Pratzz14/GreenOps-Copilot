@@ -117,7 +117,9 @@ npm --prefix frontend run generate:api
 ## Project layout and data
 
 ```text
-data/                            13 core CSVs + 2 official templates
+data/bronze/                     13 core CSVs + 2 official templates
+data/silver/                     Generated versioned CSV tables and reports
+data/gold/                       Reserved for Gold CSVs
 src/                             Snapshot + read-only profiling CLI; source contracts
 backend/                         FastAPI, contracts and cached metadata
 frontend/src/api/                Client and generated OpenAPI types
@@ -129,7 +131,7 @@ outputs/                         Generated artifacts (ignored by Git)
 sprintd-basel-green-ai-data/      Original docs, upstream Git metadata, extra/
 ```
 
-P0 CSVs were **moved**, not copied, into `data/`. Treat them as read-only.
+P0 CSVs were **moved**, not copied, into `data/bronze/`. Treat them as read-only.
 Bonus files remain untouched in `sprintd-basel-green-ai-data/extra/`.
 See [source hashes](docs/DATA_SNAPSHOT.md), [API contract](docs/API.md),
 [demo guide](docs/DEMO.md), and [current limitations](docs/LIMITATIONS.md).
@@ -155,3 +157,35 @@ install the browser once with `npm --prefix frontend exec -- playwright install 
 For the active Phase 2 review session, the combined EDA server uses
 [port 8001](http://127.0.0.1:8001) because the older server already occupies
 8000. Use `--port 8001` and set `EDA_URL` accordingly when reproducing that session.
+
+## Build and reconcile Silver
+
+Run these commands after profiling Bronze, then restart the API.
+
+```powershell
+.\.venv\Scripts\python.exe -m src.normalize --data data --out outputs
+.\.venv\Scripts\python.exe -m src.reconciliation --out outputs
+```
+
+Normalization stages CSVs for the exact source snapshot and transformation
+code. Reconciliation checks grouped sums and publishes the immutable
+`data/silver/<version>/` directory and `outputs/current_silver.csv` pointer.
+The top-level `cost_baseline.csv`, `reconciliation_report.csv` and
+`unresolved_issues.csv` are convenience copies. The API checks the versioned
+manifest and content hashes at startup and serves the loaded version until
+restart. It compares the input identity with the Bronze snapshot when present.
+
+Open **Silver** for the cleaned tables, full export and baseline views,
+applicability and distribution profiles, same-population comparisons, record
+lineage, financial reconciliation and unresolved issues. Decimal amounts are
+stored at calculation precision. The financial subtotal includes recorded
+eligible provider and gateway charges and Final contracts within 2025-09-01
+through 2026-08-31. Missing costs and rates stay blank and financial coverage is
+reported separately from build readiness. Contract months remain monthly for
+annual billing cycles. Usage observations carry no additional cost. The GPU
+alias remains a candidate and the test pool has no instance allocations.
+Gold is still marked **Not built yet**.
+
+Run Silver browser regression against the built app with
+`node frontend/e2e/silver.cjs` and set `EDA_URL` if the server uses a different
+local port.
