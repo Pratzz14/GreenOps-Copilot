@@ -52,6 +52,7 @@ def create_app(outputs: Path = ROOT / "outputs", dist: Path = ROOT / "frontend" 
         @app.get("/dashboard", include_in_schema=False)
         @app.get("/data-explorer", include_in_schema=False)
         @app.get("/analysis", include_in_schema=False)
+        @app.get("/recommendations", include_in_schema=False)
         def frontend():
             return FileResponse(dist / "index.html")
 

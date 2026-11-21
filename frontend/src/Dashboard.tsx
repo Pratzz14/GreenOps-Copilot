@@ -3,7 +3,8 @@ import DashboardInfo from './DashboardInfo';
 import { useGold } from './api/gold';
 import DashboardCharts from './DashboardCharts';
 import DashboardUtilization from './DashboardUtilization';
-import DashboardRecommendations, { type RecommendationGroup } from './DashboardRecommendations';
+import DashboardRecommendations from './DashboardRecommendations';
+import type { RecommendationGroup } from './recommendationData';
 import DashboardRequest from './DashboardRequest';
 import { CalculationFactors, Evidence } from './GoldEvidence';
 import {

@@ -19,6 +19,22 @@ TEMPLATES = {
 }
 
 
+REVIEW_REASONS = {
+    'Data cluster': 'Daily usage data cannot show safe pause windows. The owner must confirm the operating schedule.',
+    'Server': 'Usage is low, but dependencies, job history and restore readiness are not confirmed.',
+    'Licence': 'Seat demand, renewal terms or the notice deadline need confirmation before seats are removed.',
+}
+ELIGIBLE_REASON = 'No protection rule applies. The renewal date, notice deadline and seat price are on record.'
+
+
+def safety_reason(kind, status, applicable):
+    decisions = {'blocked'} if status == 'blocked' else {'blocked', 'human_review', 'conditions_apply'}
+    reasons = list(dict.fromkeys(rule['reason'] for rule in applicable if rule['decision'] in decisions))
+    if reasons and status != 'eligible':
+        return ' '.join(reasons)
+    return ELIGIBLE_REASON if status == 'eligible' else REVIEW_REASONS[kind]
+
+
 def subject_id(provider, name, family):
     return f'{family}:{key_for(provider, name, family)}'
 
@@ -151,9 +167,12 @@ def catalog(gold, output):
 
     measures = {row['measure_id']: row for row in gold.measures()}
     by_subject, protections = defaultdict(list), defaultdict(list)
+    # The recurring-pause recommendation uses the standalone measure.
+    # The relocation alternative is assessed in Gold's measures and package views.
     for row in gold.select('''
         SELECT m.measure_id, m.subject_id, f.category, f.evidence_set_id
-        FROM gold.measure m JOIN gold.finding f USING (run_id, finding_id) WHERE m.run_id=?
+        FROM gold.measure m JOIN gold.finding f USING (run_id, finding_id)
+        WHERE m.run_id=? AND m.measure_id <> 'relocate-schedule-development'
     '''):
         by_subject[row['subject_id']].append(row)
     for rule in gold.select("""
@@ -208,7 +227,7 @@ def catalog(gold, output):
                    category=kind, resource=item['label'], proposed_change=change, observed=len(item['observed']),
                    qualifying=len(item['qualifying']), months=item['months'], evidence=refs,
                    persistent_unused=item['persistent_unused'], cost_center=item.get('center') or None,
-                   rule_status=status, responsible_role=role,
+                   rule_status=status, safety_reason=safety_reason(kind, status, applicable), responsible_role=role,
                    next_check=next_check, estimate=measure, attribution=item['attribution'],
                    decision_as_of=gold.run['decision_as_of'], action=action,
                    seat_history={month: rows[0] for month, rows in item['qualifying'].items()} if kind == 'Licence' else {},

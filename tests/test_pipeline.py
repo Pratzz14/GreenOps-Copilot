@@ -7,8 +7,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.main import create_app
-from src import gold, pipeline
-from src.ingest import ROOT
+from src import exports, gold, pipeline
+from src.ingest import EXTRA_DIRECTORY, ROOT
 from src.profile import read_csv
 from test_supplemental import write_sources
 
@@ -84,7 +84,7 @@ def test_rollback_history_coverage_and_unknown_values(sources, tmp_path):
         assert sources_api["m365_usage.csv"]["grain"] == "One department per week"
     export = {row["parameter"]: row for row in read_csv(full_directory / "gold" / full_run / "baseline.csv")[1]}
     assert export["total_co2_market_based_baseline_year_kg"]["value_mid"] == ""
-    assert export["grid_mix_location_based_switzerland"]["value_mid"] == ""
+    assert Decimal(export["grid_mix_location_based_switzerland"]["value_mid"]) == Decimal("0.049")
     assert all(row[field].strip().lower() not in {"nan", "inf", "-inf", "infinity", "-infinity"}
                for row in export.values() for field in ("value_low", "value_mid", "value_high"))
 
@@ -109,12 +109,12 @@ def test_rollback_history_coverage_and_unknown_values(sources, tmp_path):
                     reason="Builds the complete case data. Set GREENOPS_FULL_PIPELINE=1 to run it.")
 def test_full_case_data_reproduces_the_pinned_baseline(tmp_path):
     out = tmp_path / "out"
-    release = pipeline.build(ROOT / "data", ROOT / "sprintd-basel-green-ai-data" / "extra", out, DAY)
+    release = pipeline.build(ROOT / "data", EXTRA_DIRECTORY, out, DAY)
     directory = pipeline.release_directory(out, release)
     rows = {row["parameter"]: row for row in
             read_csv(directory / "gold" / gold.current_run(directory) / "baseline.csv")[1]}
-    pinned = {"total_cost_baseline_year_chf": "463471.49", "total_energy_baseline_year_kwh": "128061.32",
-              "total_co2_location_based_baseline_year_kg": "13218.68"}
+    pinned = {"total_cost_baseline_year_chf": "469213.99", "total_energy_baseline_year_kwh": "128061.32",
+              "total_co2_location_based_baseline_year_kg": "18126.97"}
     for parameter, value in pinned.items():
         assert Decimal(rows[parameter]["value_mid"]).quantize(Decimal("0.01")) == Decimal(value)
     with TestClient(create_app(out, tmp_path / "dist")) as client:
@@ -126,3 +126,6 @@ def test_full_case_data_reproduces_the_pinned_baseline(tmp_path):
     scopes = {row["entity"] for row in read_csv(silver / "supplemental_comparisons.csv")[1]
               if row["comparison"] == "provider_spend"}
     assert "Azure + AWS + Swiss Hoster" in scopes and "All recorded charges" in scopes
+    submission = exports.export_submission(out)
+    for name in (exports.BASELINE, exports.MEASURES):
+        assert (submission / name).read_bytes() == (ROOT / "submission" / name).read_bytes()

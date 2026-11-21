@@ -1,11 +1,19 @@
 /* Dashboard navigation, linked charts, case decisions and failure states. */
-const { chromium, expect } = require('@playwright/test');
+const { chromium, expect: playwrightExpect } = require('@playwright/test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 
 const url = process.env.EDA_URL || 'http://127.0.0.1:8001';
+const expect = playwrightExpect.configure({ timeout: 15000 });
 const noOverflow = async page => {
-  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Dashboard overflows the viewport');
+  const overflow = await page.evaluate(() => {
+    if (document.documentElement.scrollWidth <= innerWidth) return null;
+    return [...document.querySelectorAll('body *')]
+      .filter(element => element.getBoundingClientRect().right > document.documentElement.clientWidth + 1)
+      .slice(0, 12)
+      .map(element => ({ tag: element.tagName, className: element.getAttribute('class'), right: element.getBoundingClientRect().right }));
+  });
+  assert.equal(overflow, null, `Dashboard overflows the viewport: ${JSON.stringify(overflow)}`);
 };
 
 async function verifyDashboard(browser, viewport) {
@@ -21,7 +29,7 @@ async function verifyDashboard(browser, viewport) {
   await page.goto(url);
   await expect(page).toHaveURL(url + '/dashboard');
   await expect(page).toHaveTitle(/GreenOps/);
-  await expect(page.getByRole('navigation').getByRole('link')).toHaveText(['Data Explorer', 'Analyst Workspace', 'Dashboard']);
+  await expect(page.getByRole('navigation').getByRole('link')).toHaveText(['Data Explorer', 'Analyst Workspace', 'Dashboard', 'Recommendations']);
   await expect(page.getByRole('link', { name: 'Dashboard', exact: true })).toHaveAttribute('aria-current', 'page');
   await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toHaveClass('dashboard-visually-hidden');
   await expect(page.getByText('Basel sample company', { exact: true })).toHaveCount(0);
@@ -41,6 +49,15 @@ async function verifyDashboard(browser, viewport) {
   const projected = await (await page.request.get(recommendationUrl + '?months=2025-10&months=2026-07&group=provider&driver=Azure')).json();
   assert.deepEqual(projected.find(item => item.id === developmentRecommendation.id).estimate, developmentRecommendation.estimate);
   const recommendations = page.getByRole('region', { name: 'Recommendations' });
+  const recommendationPages = recommendations.getByRole('group', { name: 'Recommendation pages' });
+  const findRecommendation = async locator => {
+    const next = recommendationPages.getByRole('button', { name: 'Next' });
+    await expect(recommendations.getByRole('table', { name: 'Grouped recommendations' })).toBeVisible();
+    while (!(await locator.isVisible()) && await next.isVisible() && await next.isEnabled()) {
+      await next.click();
+    }
+    await expect(locator).toBeVisible();
+  };
   const groupedUrl = recommendationUrl.replace(/recommendations$/, 'recommendation-groups');
   const july = await (await page.request.get(groupedUrl +
     '?group=tool&driver=Microsoft%20Copilot&months=2026-06&months=2026-07')).json();
@@ -65,6 +82,7 @@ async function verifyDashboard(browser, viewport) {
     }
   }
   const schedule = recommendations.locator('tr.dashboard-recommendation').filter({ hasText: 'Data platform development' });
+  await findRecommendation(schedule);
   await expect(schedule).toContainText('Needs review', { timeout: 15000 });
   await expect(schedule).toContainText(/1[’']532\.33/);
   await expect(recommendations.getByRole('columnheader', { name: /Potential monthly savings.*Aug 2026/ })).toBeVisible();
@@ -77,6 +95,7 @@ async function verifyDashboard(browser, viewport) {
   await schedule.getByRole('button').click();
   const crmRow = recommendations.locator('tr.dashboard-recommendation').filter({ hasText: 'CRM platform' });
   await recommendations.getByLabel('Spending horizon').selectOption('year');
+  await findRecommendation(crmRow);
   await expect(crmRow).toContainText('10 unused seats');
   await crmRow.getByRole('button').click();
   await expect(expansion.getByText(/CRM platform.*4100/)).toBeVisible();
@@ -99,7 +118,7 @@ async function verifyDashboard(browser, viewport) {
   await filters.getByLabel('Group by').selectOption('platform');
   await expect(recommendations).toContainText('Grouped by platform');
   await expect(drivers.getByRole('list', { name: 'Ranked platform drivers' })).toBeVisible();
-  await expect(recommendations.getByRole('button', { name: /Review cluster pauses.*Data platforms/ })).toBeVisible();
+  await findRecommendation(recommendations.getByRole('button', { name: /Review cluster pauses.*Data platforms/ }));
   await filters.getByLabel('Group by').selectOption('tool');
   const overview = await (await page.request.get(url + `/api/v1/runs/${currentRun.run_id}/overview`)).json();
   assert.ok(Number(overview.imputed_cost_chf) > 0, 'Gold run must include imputed charges');
@@ -339,6 +358,40 @@ async function verifyDashboard(browser, viewport) {
   await page.close();
 }
 
+async function verifyRecommendationSummary(browser, viewport) {
+  const page = await browser.newPage({ viewport });
+  const explanation = 'Unused seats recurred, so review seat counts at renewal.';
+  await page.route(/\/recommendation-groups\?/, async route => {
+    const response = await route.fetch();
+    const rows = await response.json();
+    const member = rows.find(row => row.scope === 'CRM platform')?.members[0];
+    if (member) member.ai_tag = { decision: 'human_review', reason: 'contract', evidence_id: 'fixture', explanation };
+    const blocked = rows.flatMap(row => row.members).find(item => item.resource === 'dr-failover');
+    if (blocked) delete blocked.safety_reason;
+    await route.fulfill({ response, json: rows });
+  });
+  await page.goto(url + '/recommendations');
+  const summary = page.getByRole('region', { name: 'Overall summary' });
+  const search = page.getByRole('searchbox', { name: 'Find a recommendation' });
+  await expect(summary).toBeVisible();
+  await search.fill('dr-failover');
+  await page.getByRole('button', { name: /Review server downsizing or pauses.*dr-failover/ }).click();
+  await expect(page.getByRole('cell', { name: 'The named disaster recovery server must remain running.' })).toBeVisible();
+  await search.fill('CRM platform');
+  await expect(summary).toContainText('Matching recommendations1');
+  await expect(summary).toContainText('Supporting resources2');
+  await expect(summary).toContainText(/6[’']600\.00/);
+  await page.getByLabel('Savings shown').selectOption('energy');
+  await expect(summary).toContainText(/6[’']600\.00/);
+  await page.getByRole('button', { name: /Reduce unused seats at renewal.*CRM platform/ }).click();
+  await expect(page.getByRole('cell', { name: explanation })).toBeVisible();
+  await noOverflow(page);
+  await page.getByLabel('Resource type').selectOption('shutdown');
+  await expect(summary).toContainText('Matching recommendations0');
+  await expect(summary).toContainText('Unavailable');
+  await page.close();
+}
+
 async function verifyUnavailable(browser) {
   const page = await browser.newPage();
   const current = '**/api/v1/runs/current';
@@ -365,6 +418,8 @@ async function verifyUnavailable(browser) {
   const browser = await chromium.launch({ headless: true });
   try {
     for (const viewport of [{ width: 1568, height: 1003 }, { width: 390, height: 844 }]) {
+      await verifyRecommendationSummary(browser, viewport);
+      console.log(`Recommendations passed at ${viewport.width} × ${viewport.height}.`);
       await verifyDashboard(browser, viewport);
       console.log(`Dashboard passed at ${viewport.width} × ${viewport.height}.`);
     }

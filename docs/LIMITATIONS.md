@@ -14,7 +14,8 @@
   calendar require review.
 - The sample measures are blocked or subject to human review. The app publishes
   separate conditional estimates and credits only eligible measures in
-  the automatic package. The case submission files are drafts.
+  the automatic package. The submitted measures CSV contains the provisional
+  portfolio used to assess the two challenge targets.
 - A production deployment would replace manual source drops with managed
   ingestion, validate inventory and contract entitlements with owners, govern
   factor updates, and record approvals in an authenticated audit trail. Validate

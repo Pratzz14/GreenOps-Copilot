@@ -165,6 +165,7 @@ class GoldRecommendationTag(Contract):
     decision: Literal["eligible", "human_review"]
     reason: str
     evidence_id: str
+    explanation: str | None = None
 
 
 class GoldRecommendation(Contract):
@@ -180,6 +181,7 @@ class GoldRecommendation(Contract):
     cost_center: str | None = None
     rule_status: Literal["eligible", "human_review", "blocked"]
     safety_status: Literal["eligible", "human_review", "blocked"]
+    safety_reason: str = ""
     responsible_role: str
     next_check: str
     estimate: GoldMeasure | None

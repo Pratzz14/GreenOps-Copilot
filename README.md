@@ -7,9 +7,10 @@ The local app opens the Gold Dashboard when a validated run is published.
 Data Explorer includes profiles for the 13 core sources, cleaned Silver data,
 and the Gold calculation tables. See **Build and verify Gold** for the pipeline.
 
-## Hackathon submission
+## Sprintd Basel submission
 
-Submit the prototype and both filled CSVs from [submission/](submission/).
+This repository contains the prototype and both filled challenge templates for
+the Sunday, 22 November 2026, 08:30 platform submission.
 
 - [Baseline and assumptions CSV](submission/template_baseline_and_assumptions.csv)
 - [Measures package CSV](submission/template_measures_package.csv)
@@ -19,9 +20,9 @@ The September 2025 through August 2026 baseline and the selected
 portfolio models CHF 58,606 in annual savings (12.49%), 23,849 kWh of annual
 electricity savings, and 5,913 kg CO₂e of annual location-based emissions
 savings (32.62%). Estimated implementation costs CHF 16,500
-(15 person-days). The modeled savings fall short of the 25% cost and 40%
-emissions targets. The package is provisional because coverage is partial,
-some emissions use proxies, and some measures require owner approval.
+(15 person-days), at the budget cap. The modeled savings fall short of the 25%
+cost and 40% emissions targets. The portfolio uses partial coverage and
+location-based proxies and requires owner approval.
 
 The selected package includes scaling back the customer portal's test pool
 after acceptance, reclaiming AI and SaaS seats at renewal, and pausing the
@@ -30,8 +31,21 @@ also includes a Zurich development pilot that keeps Frankfurt GPU training
 intact. Its savings still depend on a like-for-like Zurich quote and cutover
 validation.
 
-Case data attribution: Sample data ALTYCA, sprintd Basel 2026.
-[Organizer requirements](https://github.com/Fa-Bee/sprintd-basel-green-ai-data#submission-baseline-assumptions-and-package-of-measures)
+### Five-minute jury demo
+
+| Case function | Where to see it |
+| --- | --- |
+| Connect | **Dashboard** shows expenditure, electricity and location-based emissions by department and tool. **Data Explorer** traces the result through Bronze, Silver and Gold. |
+| Find | In **Dashboard → Utilization analysis**, filter to Microsoft Copilot and expand a cost centre to inspect recurring unused seats and the underlying rows. |
+| Decide | In **Data Explorer → Gold → Detailed overview → Savings package**, expand **Conditional package illustration** for the submitted portfolio, then compare savings with the targets and budget. |
+| Know the limits | Search **Recommendations** for `dr-failover` and open its protection evidence. Ticket T-1094 blocks the shutdown. **Silver → Reconciliation** surfaces unresolved source discrepancies. |
+
+See the [live-demo walkthrough](docs/DEMO.md), [feasibility analysis](docs/FEASIBILITY.md),
+[path to operation](docs/DEMO.md#operationalization), and [team AI electricity
+estimate](docs/DEMO.md#team-ai-electricity-estimate).
+
+Case data attribution is **Sample data ALTYCA, sprintd Basel 2026**. The
+[source snapshot](docs/DATA_SNAPSHOT.md) records the upstream version.
 
 ## Supported environment
 
@@ -40,18 +54,26 @@ Version hints are in `.python-version` and `.nvmrc`. Python dependencies,
 including transitive dependencies, are pinned in `requirements.txt`. npm uses
 exact direct versions and `frontend/package-lock.json`. No API keys are needed.
 
-## Install
+## Run the submission from a fresh checkout
 
-From the project root in PowerShell:
+Clone or extract the project to a short path such as `C:\src\greenops` on
+Windows, then open PowerShell at the project root. The first build processes
+the 13 core and 15 bonus sources and may take several minutes.
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 npm --prefix frontend ci
+.\.venv\Scripts\python.exe -m src.pipeline --decision-as-of 2026-11-21
+npm --prefix frontend run build
+.\.venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ```
 
-Installation requires internet. The installed app and built frontend run locally
-without external services, remote assets or fonts.
+Open [the local dashboard](http://127.0.0.1:8000/dashboard). Installation
+requires internet. The pipeline and demo use the bundled inputs and run locally
+without external services or API keys. Stop the server with Ctrl+C. To
+reproduce the two submitted CSVs, run `.\.venv\Scripts\python.exe -m src.exports`
+from another terminal. It prints the export directory under `outputs/submission/`.
 
 ## Prepare sources
 
@@ -143,21 +165,19 @@ npm --prefix frontend run generate:api
 
 ```text
 data/bronze/                     13 core CSVs + 2 official templates
+data/extra/                      15 organizer bonus sources
 data/silver/                     Generated versioned CSV tables and reports
-data/gold/                       Reserved for Gold CSVs
-src/                             Snapshot + read-only profiling CLI; source contracts
+data/gold/                       Gold directory for individual legacy builds
+src/                             Ingestion, normalization, Gold calculations and exports
 backend/                         FastAPI, contracts and cached metadata
 frontend/src/api/                Client and generated OpenAPI types
-frontend/src/components/         Future shared UI components
-frontend/src/features/           Future findings, package, safety and export UI
 tests/                           Profiling, snapshot, API and static-serving checks
 docs/                            Snapshot, data map, assumptions, API and demo
 outputs/                         Generated artifacts (ignored by Git)
-sprintd-basel-green-ai-data/      Original docs, upstream Git metadata, extra/
+submission/                      The filled baseline and measures templates
 ```
 
-P0 CSVs were **moved**, not copied, into `data/bronze/`. Treat them as read-only.
-Bonus files remain untouched in `sprintd-basel-green-ai-data/extra/`.
+Treat the original inputs in `data/bronze/` and `data/extra/` as read-only.
 See [source hashes](docs/DATA_SNAPSHOT.md), [API contract](docs/API.md),
 [demo guide](docs/DEMO.md), and [current limitations](docs/LIMITATIONS.md).
 
@@ -178,10 +198,6 @@ the API, exercises drill-downs, filters, baseline switching and error/retry,
 and checks desktop/mobile layout and console health. Screenshots go to the
 Windows temporary directory under `greenops-phase2-qa/`. If Chromium is absent,
 install the browser once with `npm --prefix frontend exec -- playwright install chromium`.
-
-For the active Phase 2 review session, the combined EDA server uses
-[port 8001](http://127.0.0.1:8001) because the older server already occupies
-8000. Use `--port 8001` and set `EDA_URL` accordingly when reproducing that session.
 
 ## Build with the extra datasets
 
@@ -218,9 +234,9 @@ storage GB-days and Power BI refresh activity are available for analysis.
 Their baseline electricity estimates require matching service intensity or
 capacity evidence, so Microsoft 365 storage appears in the baseline as
 activity with a missing energy factor. The dashboard shows one emissions
-total: direct CO₂ for Germany and Ireland plus Swiss operating CO₂e. Its
-information panel gives both parts. The submission CSVs and the 40% target
-stay on direct CO₂. Open **Coverage by workload** on the dashboard, or call
+total that combines direct CO₂ for Germany and Ireland with Swiss operating and
+mixed-EU CO₂e estimates. The submitted CSVs use that same location-based
+boundary for baseline and savings. Open **Coverage by workload** on the dashboard, or call
 `GET /api/v1/runs/{run_id}/coverage`, to see each workload's activity,
 factor sources and whether activity, an energy factor or a direct-CO₂ grid
 factor is missing.
@@ -329,9 +345,11 @@ Run `npm --prefix frontend run test:dashboard` against the combined local app.
 
 Recommendations use recurring baseline observations and share the dashboard filters.
 Run `.\.venv\Scripts\python.exe -m backend.recommendations` to add OpenAI review
-tags to the current published run, or pass `--tag-recommendations` when publishing
-Gold. The batch uses the existing `OPENAI_API_KEY`. Dashboard reads use the
-saved tags and rule-based decisions.
+tags and one-line explanations to the current published run, or pass
+`--tag-recommendations` when publishing Gold. The batch uses the existing
+`OPENAI_API_KEY` and backfills cached tags that lack an explanation. Expand a
+recommendation to read the reason for each supporting resource. On the
+Recommendations page, the Overall summary reflects the filtered list.
 
 Open **Gold** in **Data Explorer** to see the baseline and browse all 14
 published tables. Expand a table to inspect its schema and records. Open
@@ -340,9 +358,9 @@ the savings package. The scorecard defaults to the mid
 steady-state scenario used in the exports. Switch to **First 12 months** to
 see the effect of lead times and effective dates. The submission exports use the assessed portfolio's mid steady-state estimates.
 The scorecard stays provisional while coverage and owner approvals are open.
-Download the files from Dashboard or Gold, or run
-`python -m src.exports` to generate both official filenames together under
-`outputs/submission/<run_id>/` for the active release.
+Run `python -m src.exports` to export the selected portfolio and baseline
+together under `outputs/submission/<run_id>/`. The app also exposes the
+individual baseline and package downloads.
 
 Run `npm --prefix frontend run test:gold` against the combined local app.
 Set `EDA_URL` for a port other than 8001. [Demo](docs/DEMO.md#gold-layer-demo) ·

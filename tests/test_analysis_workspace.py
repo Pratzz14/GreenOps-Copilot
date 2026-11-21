@@ -69,7 +69,7 @@ def test_visual_month_units_and_protected_division():
 def test_analysis_routes_starters_and_exports(workspace):
     client, _ = workspace
     assert client.get("/", follow_redirects=False).headers["location"] == "/dashboard"
-    for path in ("/dashboard", "/data-explorer", "/analysis"):
+    for path in ("/dashboard", "/data-explorer", "/analysis", "/recommendations"):
         assert client.get(path).status_code == 200
     assert client.get("/api/v1/analysis/missing").json()["detail"]["code"] == "not_found"
     catalog = client.get("/api/v1/analysis/catalog").json()

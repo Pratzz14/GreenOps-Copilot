@@ -13,7 +13,7 @@ from src.cost_estimation import EstimationError, estimate_missing_costs
 from src.factors import FACTORS
 from src.gold_baseline import START, STOP, GoldData, build_cost, build_impact, build_licences, imputed_costs, key_for
 from src.gold_measures import CAP, CARBON_TARGET, COST_TARGET, DAY_RATE, build_measures
-from src.ingest import ROOT
+from src.ingest import EXTRA_DIRECTORY, ROOT
 from src.optimizer import build_packages
 from src.profile import read_csv
 from src.silver_storage import REPORTS, FINANCIAL, VERSION_PATTERN, atomic_csv, file_hash, pointer, published_tables, silver_directory, validate, write_csv
@@ -178,7 +178,7 @@ def publish(out, decision, evidence_dir=None, *, estimate_missing=False):
     if full and evidence_dir is not None:
         raise ValueError("Full builds use supplemental evidence from versioned Silver.")
     if evidence_dir is None and not full and out.resolve() == ROOT / "outputs":
-        evidence_dir = ROOT / "sprintd-basel-green-ai-data" / "extra"
+        evidence_dir = EXTRA_DIRECTORY
     supplemental, hashes = load_supplemental(evidence_dir) if evidence_dir is not None else ({}, [])
     if full:
         for filename, key in SUPPLEMENTAL_KEYS.items():

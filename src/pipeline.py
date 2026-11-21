@@ -96,7 +96,7 @@ def main():
     root = ingest.ROOT
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data", type=Path, default=root / "data")
-    parser.add_argument("--extra", type=Path, default=root / "sprintd-basel-green-ai-data" / "extra")
+    parser.add_argument("--extra", type=Path, default=ingest.EXTRA_DIRECTORY)
     parser.add_argument("--out", type=Path, default=root / "outputs")
     parser.add_argument("--core-only", action="store_true")
     parser.add_argument("--decision-as-of", type=date.fromisoformat)

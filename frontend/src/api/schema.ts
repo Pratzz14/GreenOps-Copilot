@@ -1306,6 +1306,11 @@ export interface components {
              * @enum {string}
              */
             safety_status: "eligible" | "human_review" | "blocked";
+            /**
+             * Safety Reason
+             * @default
+             */
+            safety_reason: string;
             /** Responsible Role */
             responsible_role: string;
             /** Next Check */
@@ -1326,6 +1331,8 @@ export interface components {
             reason: string;
             /** Evidence Id */
             evidence_id: string;
+            /** Explanation */
+            explanation?: string | null;
         };
         /** GoldRun */
         GoldRun: {
@@ -1522,6 +1529,11 @@ export interface components {
              * @enum {string}
              */
             safety_status: "eligible" | "human_review" | "blocked";
+            /**
+             * Safety Reason
+             * @default
+             */
+            safety_reason: string;
             /** Responsible Role */
             responsible_role: string;
             /** Next Check */

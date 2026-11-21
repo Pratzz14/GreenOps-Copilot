@@ -6,6 +6,7 @@ const Workspace = lazy(() => import('./AnalystWorkspace'));
 const Silver = lazy(() => import('./Silver'));
 const Gold = lazy(() => import('./Gold'));
 const Dashboard = lazy(() => import('./Dashboard'));
+const Recommendations = lazy(() => import('./Recommendations'));
 
 const layers = ['Data Journey', 'Bronze', 'Silver', 'Gold'] as const;
 type Layer = (typeof layers)[number];
@@ -28,6 +29,7 @@ export default function App() {
   const path = window.location.pathname;
   const workspace = path === '/analysis';
   const dashboard = path === '/dashboard';
+  const recommendations = path === '/recommendations';
 
   function navigate(event: KeyboardEvent<HTMLButtonElement>, index: number) {
     const last = layers.length - 1;
@@ -49,13 +51,15 @@ export default function App() {
       <header className="app-header">
         <a className="brand" href="/dashboard"><span className="brand-mark" aria-hidden="true">G</span>GreenOps Copilot</a>
         <nav className="workspace-navigation" aria-label="Main navigation">
-          <a href="/data-explorer" aria-current={workspace || dashboard ? undefined : "page"}>Data Explorer</a>
+          <a href="/data-explorer" aria-current={workspace || dashboard || recommendations ? undefined : "page"}>Data Explorer</a>
           <a href="/analysis" aria-current={workspace ? "page" : undefined}>Analyst Workspace</a>
           <a href="/dashboard" aria-current={dashboard ? "page" : undefined}>Dashboard</a>
+          <a href="/recommendations" aria-current={recommendations ? "page" : undefined}>Recommendations</a>
         </nav>
       </header>
-      <main className={dashboard ? 'dashboard-shell' : undefined}>
-      {dashboard ? <Suspense fallback={<p role="status">Loading Dashboard…</p>}><Dashboard /></Suspense> :
+      <main className={dashboard || recommendations ? 'dashboard-shell' : undefined}>
+      {recommendations ? <Suspense fallback={<p role="status">Loading Recommendations…</p>}><Recommendations /></Suspense> :
+      dashboard ? <Suspense fallback={<p role="status">Loading Dashboard…</p>}><Dashboard /></Suspense> :
       workspace ? <Suspense fallback={<p role="status">Loading Analyst Workspace…</p>}><Workspace /></Suspense> : <>
       <div className="layer-tabs" role="tablist" aria-label="Data layers" ref={tabs}>
         {layers.map((name, index) => (

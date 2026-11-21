@@ -49,7 +49,7 @@ def test_grouped_recommendations_count_distinct_safe_estimates():
     assert first["omitted_measure_count"] == second["omitted_measure_count"] == 1
     assert second["savings"]["steady_state"]["net_chf"]["eligible"] is None
 
-from backend.recommendation_tags import ReviewTag, cached_tag, enrich, final_status, read_tags, verify_tag
+from backend.recommendation_tags import ReviewTag, cache_path, cached_tag, enrich, evidence_version, final_status, read_tags, verify_tag
 from src.recommendations import recurring, seat_gap, server_weeks, unique_periods
 
 
@@ -99,12 +99,18 @@ def test_ai_batch_persists_validated_tags_and_reuses_them(tmp_path, monkeypatch)
                 estimate={"notice_deadline": date(2026, 11, 25), "estimates": []})
     monkeypatch.setattr("backend.recommendation_tags.settings", lambda: ("test-key", "test-model"))
     calls = []
+    legacy_tag = {"decision": "human_review", "reason": "contract", "evidence_id": "seat.notice"}
+    path = cache_path(tmp_path, "run")
+    path.parent.mkdir()
+    path.write_text(json.dumps({"seat": {"version": evidence_version(item), "tag": legacy_tag}}), encoding="utf-8")
+    assert cached_tag(item, read_tags(tmp_path, "run")).explanation is None
+    explanation = "Two seats were persistently unused, and the notice deadline is four days away."
 
     def respond(url, **options):
         calls.append(url)
         facts = json.loads(options["json"]["input"])[0]
         assert facts["seat.notice"] == {"notice_days_remaining": 4}
-        data = {"tags": [{"decision": "human_review", "reason": "contract", "evidence_id": "seat.notice"}]}
+        data = {"tags": [{**legacy_tag, "explanation": explanation}]}
         return httpx.Response(200, request=httpx.Request("POST", url), json={
             "output": [{"content": [{"type": "output_text", "text": json.dumps(data)}]}],
         })
@@ -112,6 +118,7 @@ def test_ai_batch_persists_validated_tags_and_reuses_them(tmp_path, monkeypatch)
     monkeypatch.setattr("backend.recommendation_tags.httpx.post", respond)
     assert enrich(tmp_path, "run", [item]) == 1
     saved = read_tags(tmp_path, "run")
+    assert cached_tag(item, saved).explanation == explanation
     assert final_status(item["rule_status"], cached_tag(item, saved)) == "human_review"
     assert cached_tag(dict(item, evidence=[{"file": "contracts.csv", "row": 5}]), saved) is None
     assert enrich(tmp_path, "run", [item]) == 0

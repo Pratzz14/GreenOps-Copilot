@@ -22,11 +22,16 @@ class ReviewTag(BaseModel):
     decision: TagDecision
     reason: Literal["dependency", "schedule", "contract", "estimate_coverage", "rule_eligibility"]
     evidence_id: str
+    explanation: str | None = None
+
+
+class GeneratedReviewTag(ReviewTag):
+    explanation: str
 
 
 class TagResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    tags: list[ReviewTag] = Field(max_length=12)
+    tags: list[GeneratedReviewTag] = Field(max_length=12)
 
 
 def facts_for(item):
@@ -102,6 +107,9 @@ def request_tags(key, model, items):
         json={"model": model, "store": False, "input": json.dumps(payload),
               "instructions": (
                   "Return one review tag per item. Cite one exact evidence identifier from that item. "
+                  "Include an explanation in one plain-English sentence of at most 200 characters. "
+                  "Explain why the action merits consideration or needs review using only that item's facts. "
+                  "Use recurring underuse or unused seats when relevant. Do not invent savings, protections, or deadlines. "
                   "Use human_review with estimate_coverage for incomplete_savings, or schedule/dependency for "
                   "applicable protections. Use human_review with contract if a notice deadline is within 30 days. "
                   "For a rule status of human_review or blocked, use contract for a "
@@ -128,7 +136,13 @@ def enrich(output: Path, run: str, recommendations):
     model = os.environ.get("OPENAI_RECOMMENDATION_MODEL") or default_model
     path = cache_path(output, run)
     saved = read_tags(output, run)
-    pending = [item for item in recommendations if cached_tag(item, saved) is None]
+    pending = []
+    existing = {}
+    for item in recommendations:
+        tag = cached_tag(item, saved)
+        if tag is None or not tag.explanation:
+            pending.append(item)
+            existing[item["id"]] = tag
     written = 0
     for offset in range(0, len(pending), 12):
         batch = {item["id"]: item for item in pending[offset:offset + 12]}
@@ -147,7 +161,13 @@ def enrich(output: Path, run: str, recommendations):
             identifier = tag.evidence_id.partition(".")[0]
             item = batch.get(identifier)
             if item and verify_tag(item, tag):
-                saved[identifier] = {"version": evidence_version(item), "tag": tag.model_dump()}
+                explanation = tag.explanation.strip()
+                if not explanation or len(explanation) > 200 or len(explanation.splitlines()) != 1:
+                    if existing[identifier] is not None:
+                        continue
+                    explanation = None
+                saved[identifier] = {"version": evidence_version(item),
+                                     "tag": {**tag.model_dump(), "explanation": explanation}}
                 written += 1
     if written:
         path.parent.mkdir(parents=True, exist_ok=True)

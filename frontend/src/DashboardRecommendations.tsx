@@ -5,14 +5,11 @@ import DashboardRequest from './DashboardRequest';
 import DashboardPagination from './DashboardPagination';
 import { Evidence } from './GoldEvidence';
 import { carbonUnit, groupLabels, metricValue, monthLabel, dateLabel, sumAvailable, type GoldModels, type Group, type Metric } from './dashboardData';
-import { chfFormat } from './numberFormat';
+import {
+  displaySavings, fields, groupSavings, labels, memberSavings, spending, statuses, type Recommendation, type RecommendationGroup,
+} from './recommendationData';
 
-type Recommendation = GoldModels['GroupedRecommendationMember'];
-export type RecommendationGroup = GoldModels['RecommendationGroup'];
-const fields = { cost: 'net_chf', energy: 'savings_kwh', carbon: 'savings_location_kg' } as const;
-const labels = { cost: 'Net cost', energy: 'Energy', carbon: 'Location-based emissions' };
 const recommendationPageSize = 5;
-const statuses = { eligible: 'Eligible', human_review: 'Needs review', blocked: 'Blocked' };
 const actions = {
   schedule: 'Review cluster pauses',
   shutdown: 'Review server downsizing or pauses',
@@ -23,28 +20,14 @@ const reasons: Record<string, string> = {
   estimate_coverage: 'Verify incomplete savings estimates', rule_eligibility: 'Consistent with the published safety rules',
 };
 
-function spending(value: string | number) {
-  return chfFormat.format(Number(value));
-}
-
-function memberSavings(row: Recommendation, metric: Metric, month = '', horizon = 'steady_state') {
-  if (row.safety_status === 'blocked') return { amount: null, reason: 'Blocked' };
-  if (month) {
-    const period = row.monthly_spend.find(item => item.month === month);
-    return { amount: period?.amount ?? null, reason: period?.reason ?? 'No estimate for this month' };
+function safetyReason(row: Recommendation) {
+  const ruleReason = row.safety_reason?.trim();
+  if (row.safety_status === 'blocked') {
+    return ruleReason || row.next_check?.trim() || 'A published safety rule blocks this action.';
   }
-  if (row.licence_spend && metric === 'cost') {
-    return { amount: row.licence_spend[horizon === 'first_year' ? 'first_year' : 'annual'],
-      reason: row.licence_spend.reason ?? 'Renewal date unconfirmed' };
-  }
-  const value = row.estimate?.estimates.find(item => item.horizon === horizon)?.[fields[metric]];
-  return { amount: row.metric_gaps[fields[metric]] ? null : value ?? null,
-    reason: row.metric_gaps[fields[metric]] ?? 'No estimate available' };
-}
-
-function displaySavings(value: ReturnType<typeof memberSavings>, metric: Metric, basis: string) {
-  if (value.amount === null) return value.reason;
-  return metric === 'cost' ? spending(value.amount) : metricValue(value.amount, metric, carbonUnit(basis));
+  const tag = row.ai_tag;
+  const reviewReason = row.rule_status === 'eligible' && tag?.decision === 'human_review' ? reasons[tag.reason] : undefined;
+  return tag?.explanation || reviewReason || ruleReason || row.next_check?.trim() || 'No reason recorded';
 }
 
 function ObservationSources({ run, id }: { run: string; id: string }) {
@@ -66,62 +49,62 @@ function ObservationSources({ run, id }: { run: string; id: string }) {
   </details>;
 }
 
+function RecommendationDetails({ row, run, basis }: { row: Recommendation; run: string; basis: string }) {
+  const annual = row.estimate?.estimates.find(item => item.horizon === 'steady_state');
+  return <div className="dashboard-recommendation-details">
+    {row.persistent_unused !== null && <p>{row.persistent_unused} persistently unused seats</p>}
+    <p>{row.proposed_change}</p>
+    <p>{row.months[0]} through {row.months.at(-1)} · {row.months.length} months with qualifying evidence</p>
+    {annual?.estimate_status === 'conditional' && <p>Conditional savings estimate</p>}
+    <dl className="dashboard-recommendation-savings">
+      {(Object.keys(fields) as Metric[]).map(key => <div key={key}>
+        <dt>{labels[key]}</dt>
+        <dd>Annual · {displaySavings(memberSavings(row, key), key, basis)}</dd>
+        <dd>First year · {displaySavings(memberSavings(row, key, '', 'first_year'), key, basis)}</dd>
+      </div>)}
+    </dl>
+    {row.licence_spend?.unit_chf != null && <p>
+      Annual spending uses {row.persistent_unused} persistently unused seats × {spending(row.licence_spend.unit_chf)} per seat in {monthLabel(row.licence_spend.price_month)} × 12.
+    </p>}
+    {row.licence_spend?.effective_date && !row.estimate?.earliest_effective_date &&
+      <p>Earliest modeled start {dateLabel.format(new Date(row.licence_spend.effective_date))}</p>}
+    {row.safety_status !== 'blocked' && <details>
+      <summary>Monthly spending calculation</summary>
+      <ul>{row.monthly_spend.map(period => <li key={period.month}>
+        {monthLabel(period.month)} · {period.amount == null ? period.reason : spending(period.amount)}
+        {period.unused_seats != null && period.seat_price != null && period.fx_rate != null &&
+          <> · {period.unused_seats} unused seats × {period.currency} {period.seat_price} × {period.fx_rate} CHF per {period.currency}</>}
+        {period.source_file && <> · {period.source_file} row {period.source_row}</>}
+        {period.calculation && <p>{period.calculation}</p>}
+        {period.sources?.map(source => <p key={source.file}>{source.file} · Rows {source.rows.join(', ')}</p>)}
+      </li>)}</ul>
+    </details>}
+    {row.estimate?.effort_person_days != null && <p>{row.estimate.effort_person_days} person-days</p>}
+    {row.estimate?.earliest_effective_date &&
+      <p>Earliest modeled start {dateLabel.format(new Date(row.estimate.earliest_effective_date))}</p>}
+    {row.estimate?.notice_deadline && <p>Notice deadline {dateLabel.format(new Date(row.estimate.notice_deadline))}</p>}
+    <p><strong>{row.responsible_role}</strong> · {row.next_check}</p>
+    <p>Rules · {statuses[row.rule_status]}</p>
+    <p>{row.ai_tag ? `AI tag · ${statuses[row.ai_tag.decision]} · ${reasons[row.ai_tag.reason] ?? row.ai_tag.reason}`
+      : 'AI tag unavailable'}</p>
+    <ObservationSources run={run} id={row.id} />
+    {annual && <Evidence run={run} id={annual.evidence_set_id} label="Savings assumptions and sources" />}
+    {row.protection_evidence_ids.map((id, index) =>
+      <Evidence run={run} id={id} key={id} label={`Protection evidence ${index + 1}`} />)}
+  </div>;
+}
+
 function MemberEvidence({ row, run, basis, selected }: {
   row: Recommendation; run: string; basis: string; selected: boolean;
 }) {
   const [open, setOpen] = useState(selected);
-  const annual = row.estimate?.estimates.find(item => item.horizon === 'steady_state');
   const period = row.category === 'Licence' ? 'months' : 'weeks';
   return <details className="dashboard-recommendation-member" open={open} onToggle={event => setOpen(event.currentTarget.open)}>
     <summary>
       <strong>{row.resource}</strong> · {row.qualifying} of {row.observed} {period} qualified
     </summary>
-    {open && <div className="dashboard-recommendation-details">
-      {row.persistent_unused !== null && <p>{row.persistent_unused} persistently unused seats</p>}
-      <p>{row.proposed_change}</p>
-      <p>{row.months[0]} through {row.months.at(-1)} · {row.months.length} months with qualifying evidence</p>
-      {annual?.estimate_status === 'conditional' && <p>Conditional savings estimate</p>}
-      <dl className="dashboard-recommendation-savings">
-        {(Object.keys(fields) as Metric[]).map(key => <div key={key}>
-          <dt>{labels[key]}</dt>
-          <dd>Annual · {displaySavings(memberSavings(row, key), key, basis)}</dd>
-          <dd>First year · {displaySavings(memberSavings(row, key, '', 'first_year'), key, basis)}</dd>
-        </div>)}
-      </dl>
-      {row.licence_spend?.unit_chf != null && <p>
-        Annual spending uses {row.persistent_unused} persistently unused seats × {spending(row.licence_spend.unit_chf)} per seat in {monthLabel(row.licence_spend.price_month)} × 12.
-      </p>}
-      {row.licence_spend?.effective_date && !row.estimate?.earliest_effective_date &&
-        <p>Earliest modeled start {dateLabel.format(new Date(row.licence_spend.effective_date))}</p>}
-      {row.safety_status !== 'blocked' && <details>
-        <summary>Monthly spending calculation</summary>
-        <ul>{row.monthly_spend.map(period => <li key={period.month}>
-          {monthLabel(period.month)} · {period.amount == null ? period.reason : spending(period.amount)}
-          {period.unused_seats != null && period.seat_price != null && period.fx_rate != null &&
-            <> · {period.unused_seats} unused seats × {period.currency} {period.seat_price} × {period.fx_rate} CHF per {period.currency}</>}
-          {period.source_file && <> · {period.source_file} row {period.source_row}</>}
-          {period.calculation && <p>{period.calculation}</p>}
-          {period.sources?.map(source => <p key={source.file}>{source.file} · Rows {source.rows.join(', ')}</p>)}
-        </li>)}</ul>
-      </details>}
-      {row.estimate?.effort_person_days != null && <p>{row.estimate.effort_person_days} person-days</p>}
-      {row.estimate?.earliest_effective_date &&
-        <p>Earliest modeled start {dateLabel.format(new Date(row.estimate.earliest_effective_date))}</p>}
-      {row.estimate?.notice_deadline && <p>Notice deadline {dateLabel.format(new Date(row.estimate.notice_deadline))}</p>}
-      <p><strong>{row.responsible_role}</strong> · {row.next_check}</p>
-      <p>Rules · {statuses[row.rule_status]}</p>
-      <p>{row.ai_tag ? `AI tag · ${statuses[row.ai_tag.decision]} · ${reasons[row.ai_tag.reason] ?? row.ai_tag.reason}`
-        : 'AI tag unavailable'}</p>
-      <ObservationSources run={run} id={row.id} />
-      {annual && <Evidence run={run} id={annual.evidence_set_id} label="Savings assumptions and sources" />}
-      {row.protection_evidence_ids.map((id, index) =>
-        <Evidence run={run} id={id} key={id} label={`Protection evidence ${index + 1}`} />)}
-    </div>}
+    {open && <RecommendationDetails row={row} run={run} basis={basis} />}
   </details>;
-}
-
-function groupSavings(row: RecommendationGroup, metric: Metric, month: string) {
-  return month ? row.monthly_spend[month] : row.savings.steady_state[fields[metric]];
 }
 
 function Savings({ row, basis, metric, month }: { row: RecommendationGroup; basis: string; metric: Metric; month: string }) {
@@ -141,7 +124,7 @@ function Savings({ row, basis, metric, month }: { row: RecommendationGroup; basi
   </>;
 }
 
-function RecommendationRow({ row, run, basis, metric, selected, month }: {
+export function RecommendationRow({ row, run, basis, metric, selected, month }: {
   row: RecommendationGroup; run: string; basis: string; metric: Metric; selected: string | null; month: string;
 }) {
   const [open, setOpen] = useState(row.members.some(member => member.id === selected));
@@ -192,7 +175,7 @@ function RecommendationRow({ row, run, basis, metric, selected, month }: {
         <table aria-label="Supporting scopes" role="table" className="dashboard-recommendation-members">
           <thead role="rowgroup"><tr role="row"><th scope="col">Supporting scope</th>
             {row.action === 'resize' && <th scope="col">Unused seats</th>}
-            <th scope="col">Safety</th><th scope="col">{periodLabel}</th></tr></thead>
+            <th scope="col">Safety</th><th scope="col">Reason</th><th scope="col">{periodLabel}</th></tr></thead>
           <tbody role="rowgroup">{row.members.map((member, index) => {
             return <tr key={member.id} role="row" data-selected={member.id === selected}>
               <th scope="row" role="rowheader"><MemberEvidence row={member} run={run} basis={basis} selected={member.id === selected} /></th>
@@ -200,6 +183,7 @@ function RecommendationRow({ row, run, basis, metric, selected, month }: {
                 {(month ? seatCounts[index] : member.persistent_unused) ?? 'Unavailable'}
               </td>}
               <td role="cell" data-label="Safety">{statuses[member.safety_status]}</td>
+              <td role="cell" data-label="Reason" className="dashboard-recommendation-reason">{safetyReason(member)}</td>
               <td role="cell" data-label={periodLabel}>
                 {displaySavings(memberSavings(member, metric, month), metric, basis)}
               </td>

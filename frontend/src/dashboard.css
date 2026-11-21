@@ -124,7 +124,13 @@
 .dashboard-chart-panel > .dashboard-disclosure, .dashboard-package > .dashboard-disclosure { margin-top: auto; padding-top: 7px; }
 .dashboard-chart-meta { display: flex; align-items: baseline; justify-content: space-between; gap: 4px 10px; flex-wrap: wrap; color: var(--dashboard-secondary); }
 .dashboard-selected-month { font-size: 12px; color: #724810; }
-.dashboard-trend { min-width: 0; height: clamp(182px, 15vw, 235px); }
+.dashboard-trend {
+  flex: 1 0 auto;
+  min-width: 0;
+  height: clamp(220px, 20vw, 320px);
+  max-height: 460px;
+}
+.dashboard-trend + .dashboard-disclosure { margin-top: 0; }
 .dashboard-bars { min-height: clamp(182px, 15vw, 235px); display: flex; flex-direction: column; justify-content: flex-start; gap: 2px; list-style: none; margin: 0; padding: 5px 0; }
 .dashboard-bars button {
   display: grid;
@@ -424,7 +430,6 @@
   .dashboard-utilization-evidence td, .dashboard-utilization .pagination { padding-inline: 16px; }
 }
 .dashboard-recommendations { scroll-margin-top: 118px; }
-.dashboard-recommendations h2 { font-size: 24px; }
 .dashboard-recommendation-period {
   display: flex;
   align-items: center;
@@ -432,6 +437,8 @@
   gap: 8px;
   width: fit-content;
   margin: 10px 0 0;
+  color: var(--dashboard-secondary);
+  font-size: 12px;
 }
 .dashboard-recommendation-details { overflow-wrap: anywhere; }
 .dashboard-recommendations .dashboard-recommendation-count { margin: 6px 0 14px; color: var(--dashboard-secondary); }
@@ -445,9 +452,17 @@
   overflow-wrap: anywhere;
 }
 .dashboard-recommendations-table > thead, .dashboard-recommendation-members > thead { background: #e1ece0; }
-.dashboard-recommendations-table > thead th, .dashboard-recommendation > :is(th, td) { padding: 16px 14px; }
+.dashboard-recommendations-table > thead th, .dashboard-recommendation > :is(th, td) {
+  padding: 16px 14px;
+  white-space: normal;
+}
 .dashboard-recommendations .dashboard-recommendations-table { font-size: 14px; }
-.dashboard-recommendations .dashboard-recommendations-table > thead th { font-weight: 650; }
+.dashboard-recommendations-table > thead th, .dashboard-recommendation-members > thead th {
+  color: #2d4a37;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: normal;
+}
 .dashboard-recommendation-toggle strong, .dashboard-recommendation-amount strong { font-size: 15px; }
 .dashboard-recommendation > :is(th, td), .dashboard-recommendation-expansion td {
   border-top: 1px solid #d4e0d3;
@@ -461,14 +476,18 @@
   padding: 3px 0;
   border: 0;
   background: none;
-  color: inherit;
+  color: #213d32;
   font: inherit;
   text-align: left;
   cursor: pointer;
 }
 .dashboard-recommendation-toggle svg { flex: none; margin-top: 3px; }
-.dashboard-recommendations-table small { display: block; color: var(--dashboard-secondary); font-weight: normal; }
-.dashboard-recommendation-toggle small { font-size: 13px; }
+.dashboard-recommendations-table small {
+  display: block;
+  color: var(--dashboard-secondary);
+  font-size: 12px;
+  font-weight: 400;
+}
 .dashboard-recommendation-amount strong { display: block; font-variant-numeric: tabular-nums; }
 .dashboard-recommendation-amount strong + strong { margin-top: 6px; }
 .dashboard-recommendation-status { display: inline-flex; align-items: center; gap: 7px; }
@@ -480,9 +499,11 @@
 .dashboard-recommendation-evidence { background: #eef5eb; border-radius: 8px; padding: 14px; }
 .dashboard-recommendation-evidence > p:first-child { margin-top: 0; }
 .dashboard-recommendation-members { background: #fff; }
-.dashboard-recommendation-members :is(th, td) { padding: 9px; font-weight: normal; }
+.dashboard-recommendation-members :is(th, td) { padding: 9px; font-weight: normal; white-space: normal; }
+.dashboard-recommendation-members tbody th { color: #213d32; font-size: 13px; }
+.dashboard-recommendation-reason { width: 38%; }
 .dashboard-recommendation-members tbody tr + tr > :is(th, td) { border-top: 1px solid #d4e0d3; }
-.dashboard-recommendation-members thead th { font-weight: 600; }
+.dashboard-recommendation-members thead th { font-weight: 650; }
 .dashboard-recommendation-members tr[data-selected='true'] { background: #e5f0e2; }
 .dashboard-recommendation-member summary { cursor: pointer; }
 .dashboard-recommendation-details { padding-top: 6px; }
@@ -512,5 +533,49 @@
   .dashboard-recommendation-members > tbody > tr + tr { border-top: 1px solid #d4e0d3; }
   .dashboard-recommendation-members > tbody > tr > :is(th, td) { padding: 0; border: 0; font-size: 11px; }
   .dashboard-recommendation-members > tbody > tr > th { grid-column: 1 / -1; }
+  .dashboard-recommendation-members > tbody > tr > .dashboard-recommendation-reason { grid-column: 1 / -1; width: auto; }
   .dashboard-recommendation-members td::before { content: attr(data-label); display: block; color: var(--dashboard-secondary); }
+}
+
+.recommendations-summary { margin: 16px 0; }
+.recommendations-summary dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 185px), 1fr));
+  gap: 10px;
+  margin: 8px 0;
+}
+.recommendations-summary dl > div {
+  border: 1px solid #d3e1d7;
+  border-radius: 8px;
+  padding: 12px;
+}
+.recommendations-summary dt, .recommendations-summary small, .recommendations-summary > p {
+  color: var(--dashboard-secondary);
+}
+.recommendations-summary dd { margin: 4px 0 0; font-weight: 600; }
+.recommendations-summary small { font-weight: 400; }
+
+.recommendations-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px 24px;
+  flex-wrap: wrap;
+}
+.recommendations-header h1 { margin: 0 0 4px; font-size: clamp(22px, 2vw, 28px); letter-spacing: -.02em; }
+.recommendations-header p { color: var(--dashboard-secondary); }
+.recommendations-controls { display: flex; flex-wrap: wrap; gap: 12px; }
+.recommendations-controls label { min-width: 130px; }
+.recommendations-header label, .recommendations-filters label { color: var(--dashboard-secondary); font-size: 12px; }
+.recommendations-filters {
+  display: grid;
+  grid-template-columns: minmax(180px, 2fr) repeat(2, minmax(140px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+.recommendations-filters input { width: 100%; padding: 7px 10px; border-color: #b6c9ba; color: #213d32; font-size: 13px; }
+@media (max-width: 650px) {
+  .recommendations-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .recommendations-filters label:first-child { grid-column: 1 / -1; }
+  .recommendations-controls label { flex: 1 1 0; min-width: 0; }
 }

@@ -10,6 +10,7 @@ from pathlib import Path
 from src.source_specs import EXTRA_FILES
 
 ROOT = Path(__file__).resolve().parents[1]
+EXTRA_DIRECTORY = ROOT / "data" / "extra"
 CORE_FILES = (
     "azure_costs.csv", "aws_costs.csv", "hoster_invoice.csv",
     "data_platform_usage.csv", "server_inventory.csv", "server_metrics_weekly.csv",

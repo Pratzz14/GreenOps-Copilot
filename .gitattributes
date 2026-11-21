@@ -1,3 +1,9 @@
 # Preserve raw input bytes and official template hashes across platforms.
 /data/*.csv -text
 /data/bronze/*.csv -text
+/data/extra/* -text
+/submission/*.csv -text
+
+# The calculation fingerprints include source and SQL file bytes.
+/src/*.py text eol=lf
+/docs/*.sql text eol=lf

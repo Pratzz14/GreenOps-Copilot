@@ -1,8 +1,88 @@
-# Bronze exploration demo
+# GreenOps Copilot demo
+
+## Presenter transcript
+
+Allow five minutes for the live demo and three minutes for questions. Start
+with the [submission build](../README.md#run-the-submission-from-a-fresh-checkout)
+already running. The blockquotes are the lines to read aloud.
+
+### 1. Dashboard
+
+**On screen** — Open **Dashboard**. With **Assumptions** set to **Mid** and **Period** set to **All months**, point to the three headline figures, then the **Biggest drivers** and **Monthly footprint** charts.
+
+> GreenOps Copilot starts with the company-wide footprint for September 2025 through August 2026. For this baseline, we estimate about 469,000 Swiss francs in spending, 128,000 kilowatt-hours of electricity, and 18.13 tonnes of carbon dioxide equivalent. Electricity and emissions have partial coverage. Below the totals, we can see the biggest drivers and how the footprint changes month to month.
+
+### 2. Microsoft Copilot utilization and recommendation
+
+**On screen** — Stay on the Dashboard. Confirm **Group by → Tool** and **Metric → Spending**. Click **Microsoft Copilot** under **Biggest drivers**, then scroll to **Utilization analysis**. Point to cost centers **4000**, **4100**, and **4200**. Expand **4000** and open **Source rows**. Click **View recommendation** and show **Reduce unused seats at renewal** with **Spending horizon** set to **Monthly**.
+
+> Clicking Microsoft Copilot filters the trend and utilization analysis to that tool. The utilization table has seven cost-center records. In August, cost center 4000 had 13 unused seats, 4100 had seven, and 4200 had six. The expanded row shows that unused seats also appeared the previous month, and we can see which source rows support the finding.
+>
+> Those records roll up into one recommendation to reduce persistently unused seats at renewal. Across all seven cost centers, 40 seats went unused in August, representing about 678 Swiss francs that month. The recommendation needs review. Procurement and the product owner should confirm seat demand, minimum commitments, and notice terms before changing the subscription.
+
+### 3. Savings package
+
+**On screen** — Open **Data Explorer → Gold → Detailed overview**. Under
+**Savings package**, expand **Conditional package illustration** and keep
+**Mid** and **Steady state** selected. Show the target margins and expand the
+production rightsizing measure to show the protected Finance dates and its
+supporting evidence.
+
+> Our proposed package uses all 15 person-days, or 16,500 francs. It models
+> about 58,606 francs and 5.91 tonnes of location-based emissions savings
+> per year once the measures take effect. That's 12.49 percent of modeled
+> spending and 32.62 percent of modeled emissions, below both challenge
+> targets. The production pilot needs Platform and Finance sign-off. The
+> two submitted CSVs show the same baseline, measures and assumptions.
+
+### 4. Recommendations and server safety
+
+**On screen** — Open **Recommendations** in the top navigation. Set **Resource type → Servers**, search for `dr-failover`, and expand **Review server downsizing or pauses → dr-failover → Protection evidence 1**. Search for `build-agent-old` next and show **Needs review**.
+
+> Here we can see why a low-utilization server might still need to stay online. The `dr-failover` server is marked Blocked. Ticket T-1094 says it is the emergency fallback and must keep running even if it never sees load. That protection rules out shutting it down or deleting it.
+>
+> `build-agent-old` needs human review. Its usage is low, but the infrastructure owner still needs to verify dependencies, job history, and restore readiness before considering a pause.
+
+**On screen** — Clear the search, switch **Resource type → Licences**, set **Safety → Eligible**, and search for **Accounting software**. Expand the result.
+
+> An automatic deletion workflow would need an eligible server action. This baseline has zero. This licence renewal is marked Eligible because the renewal date, notice deadline, and seat price are on record. GreenOps provides the proposed action and its supporting evidence.
+
+**Close** — Give the team AI electricity estimate of 0.072 kWh for an
+illustrative 300 text-prompt equivalents. Mention that the path to operation
+starts with a monthly source refresh, Finance reconciliation and owner sign-off.
+
+### Optional Q&A walkthroughs
+
+#### Analyst Workspace
+
+**On screen** — Open **Analyst Workspace**. Select `cost_facts` and paste this into **Read-only SQL**. Click **Run analysis** and show the results.
+
+```sql
+SELECT reporting_department, SUM(cost_chf) AS recorded_spend_chf
+FROM cost_facts
+GROUP BY reporting_department
+ORDER BY recorded_spend_chf DESC NULLS LAST
+```
+
+> An analyst can write and run their own read-only SQL against the cleaned Silver data. This query totals recorded spending in Swiss francs by department and shows the departments with the highest spending first.
+
+**On screen** — In **Ask a question**, enter “What was the recorded CHF spend by department?” Click **Draft SQL**, show the generated query in the editor, then click **Run analysis**.
+
+> I can ask the same question in plain English. The workspace chooses a dataset and drafts SQL in the editor, where I can check or edit it before I run it.
+
+**If drafting is unavailable** — Load **Starter investigation → Spending by department** and run it. Say, “The workspace can draft SQL from a question when the AI service is available. This built-in investigation gives us another way to run the department spending analysis.”
+
+#### Data Explorer
+
+**On screen** — Open **Data Explorer**. In **Data Journey**, select `licence_monthly` under **Gold tables** and point to its `contracts` input. Then select `contracts` under **Silver tables** to show `ai_subscriptions.csv` and `saas_contracts.csv` in the lineage view. Click **Inspect table** to open the cleaned Silver records.
+
+> Data Explorer shows where the numbers come from. Gold contains the reporting tables, Silver contains the cleaned records, and Bronze contains the original exports. Here, the Gold licence table draws from Silver contracts. I can follow those contracts back to the AI subscription and SaaS contract files that supplied them. That’s how we can trace a recommendation from the dashboard back to its inputs.
+
+## Bronze exploration demo
 
 1. Run `python -m src.profile --data data --out outputs --docs docs` in the installed Python environment.
 2. Run `npm --prefix frontend run build`, then start the combined server with `python -m uvicorn backend.main:app --host 127.0.0.1 --port 8001`.
-3. Open [Data Explorer](http://127.0.0.1:8001/data-explorer). Bronze opens first with the 13 original exports, what each file contains, and full-export record counts.
+3. Open [Data Explorer](http://127.0.0.1:8001/data-explorer) and choose **Bronze** to see the original exports, what each file contains, and full-export record counts.
 4. Under **Exploration completed**, compare **Full exports** with **Baseline period**. The summary and drill-downs follow the selected period. The source catalog always shows full-export counts.
 5. Expand **Completeness**, **Duplicate candidates**, **Date coverage**, or **Quality findings** to see the corresponding charts.
 6. Expand **Source analysis**, select `data_platform_usage.csv` under **Source**, then choose **Coverage and proposed joins** under **Analysis**. Expand `dp-dev` to inspect six missing baseline dates. Missing observations do not establish downtime. **Filter and compare source profiles** offers source search, filters and sorting.
@@ -47,8 +127,8 @@ any table to show its schema and records, then open **Detailed overview**.
 
 1. Show the annual baseline, coverage, and spend and emissions by department.
    Change the group to **Location**. Open the emissions information panel to
-   explain that the total includes Swiss operating CO₂e, while the scorecard
-   stays on direct CO₂. Open **Coverage by workload** to show a listed gap.
+   explain the Swiss operating and mixed-EU proxies used in the location-based
+   estimate. Open **Coverage by workload** to show a listed gap.
 2. Show the `dp-dev` finding and open **View evidence**. Compare time running
    with active time and call out the observation gap. The August AI seat
    findings provide a second example with priced inactivity by product.
@@ -58,10 +138,9 @@ any table to show its schema and records, then open **Detailed overview**.
    baseline coverage leaves the official target verdict open.
 4. Open **Block blanket production shutdown** and show ticket T-1029. The
    Finance closing window and weekend activity are visible in the evidence.
-5. Download the two draft CSVs. They use the same baseline and package as the
-   mid steady-state scorecard. Download the separately labeled conditional
-   measures CSV to review the illustrative package. Close with the
-   operationalization note and the team AI electricity scenario below.
+5. Show the two [submitted CSVs](../submission/). They match the baseline and
+   conditional package at mid steady state. Close with the operationalization
+   note and the team AI electricity scenario below.
 
 ## Operationalization
 
