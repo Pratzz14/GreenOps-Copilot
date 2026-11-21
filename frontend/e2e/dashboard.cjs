@@ -67,6 +67,8 @@ async function verifyDashboard(browser, viewport) {
   const rankedResources = scan.items
     .map(row => ({ name: row.resource, cost: Number(row.impact.cost ?? -Infinity) })).sort(sortByCost);
   const utilizationTable = utilization.getByRole('table', { name: 'Resource utilization and impact' });
+  await expect(utilization.getByRole('combobox')).toHaveCount(0);
+  await expect(utilization.getByRole('searchbox', { name: 'Find a resource' })).toBeVisible();
   await expect(utilizationTable.getByRole('columnheader', { name: 'Spending' })).toHaveAttribute('aria-sort', 'descending');
   const resourceNames = utilizationTable.locator('.dashboard-utilization-resource strong');
   await expect(resourceNames).toHaveText(rankedResources.slice(0, 5).map(row => row.name));
@@ -78,6 +80,19 @@ async function verifyDashboard(browser, viewport) {
   await expect(resourcePages).toContainText(`6–10 of ${rankedResources.length}`);
   await resourcePages.getByRole('button', { name: 'Previous' }).click();
   await expect(resourceNames).toHaveText(rankedResources.slice(0, 5).map(row => row.name));
+  await resourcePages.getByRole('button', { name: 'Next' }).click();
+  for (const [metric, label] of [['energy', 'Energy'], ['carbon', 'CO₂e'], ['cost', 'Spending']]) {
+    const column = utilizationTable.getByRole('columnheader', { name: label, exact: true });
+    const button = column.getByRole('button');
+    if (metric === 'energy') await button.click();
+    else await button.press('Enter');
+    await expect(button).toBeFocused();
+    await expect(column).toHaveAttribute('aria-sort', 'descending');
+    await expect(resourcePages).toContainText(`1–5 of ${rankedResources.length}`);
+    const ranked = scan.items.map(row => ({ name: row.resource, cost: Number(row.impact[metric] ?? -Infinity) }))
+      .sort(sortByCost);
+    await expect(resourceNames).toHaveText(ranked.slice(0, 5).map(row => row.name));
+  }
   await noOverflow(page);
   if (process.env.DASHBOARD_QA_DIR) {
     const file = path.join(process.env.DASHBOARD_QA_DIR, `greenops-dashboard-${viewport.width}.png`);

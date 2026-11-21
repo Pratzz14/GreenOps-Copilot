@@ -53,8 +53,15 @@ function ResourceRow({ row, metric, unit }: { row: Finding; metric: Metric; unit
   </>;
 }
 
-function Results({ scan, matches, metric, unit }: { scan: Scan; matches: Finding[]; metric: Metric; unit: CarbonUnit }) {
+function Results({ scan, matches, metric, unit, onMetric }: {
+  scan: Scan; matches: Finding[]; metric: Metric; unit: CarbonUnit; onMetric: (metric: Metric) => void;
+}) {
   const [requestedPage, setPage] = useState(0);
+  const [previousMetric, setPreviousMetric] = useState(metric);
+  if (metric !== previousMetric) {
+    setPreviousMetric(metric);
+    setPage(0);
+  }
   const rows = [...matches].sort((a, b) => Number(b.impact[metric] ?? -Infinity) - Number(a.impact[metric] ?? -Infinity)
     || a.resource.localeCompare(b.resource));
   const page = Math.min(requestedPage, Math.max(0, Math.ceil(rows.length / utilizationPageSize) - 1));
@@ -72,10 +79,13 @@ function Results({ scan, matches, metric, unit }: { scan: Scan; matches: Finding
           <th scope="col" role="columnheader">Observation</th>
           {impactMetrics.map(impact => <th key={impact} scope="col" role="columnheader"
             className="dashboard-utilization-impact" aria-sort={impact === metric ? 'descending' : undefined}>
-            {metricLabels[impact]}{impact === metric && <svg aria-hidden="true" width="16" height="16"
-              viewBox="0 0 16 16" fill="none">
-              <path d="M8 3v10m-4-4 4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>}
+            <button type="button" className="dashboard-utilization-sort" onClick={() => onMetric(impact)}>
+              {metricLabels[impact]}
+              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d={impact === metric ? 'M8 3v10m-4-4 4 4 4-4' : 'm5 6 3-3 3 3m-6 4 3 3 3-3'}
+                  stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
           </th>)}
         </tr>
       </thead>
@@ -107,20 +117,13 @@ export default function DashboardUtilization({ run, filters, unit, onMetric }: {
         <p>{filters.driver || 'All drivers'} · {filters.period ? `${filters.period.length} months selected` : 'Baseline period'}</p>
         {scan && <p className="dashboard-utilization-count">{matches.length} matches · {scan.assessed} assessed · {scan.insufficient} with insufficient observations</p>}
       </div>
-      <div className="dashboard-utilization-controls">
-        <label>Find a resource<input type="search" value={search} onChange={event => setSearch(event.target.value)} /></label>
-        <label>Sort resources by
-          <select value={filters.metric} onChange={event => onMetric(event.target.value as Metric)}>
-            <option value="cost">Spending · highest first</option>
-            <option value="energy">Energy · highest first</option>
-            <option value="carbon">CO₂e · highest first</option>
-          </select>
-        </label>
-      </div>
+      <label className="dashboard-utilization-search">Find a resource
+        <input type="search" value={search} onChange={event => setSearch(event.target.value)} />
+      </label>
     </div>
     <DashboardRequest query={query} label="utilization analysis">{data =>
-      <Results key={JSON.stringify([params.toString(), filters.metric, searchTerm])}
-        scan={data} matches={matches} metric={filters.metric} unit={unit} />}
+      <Results key={JSON.stringify([params.toString(), searchTerm])}
+        scan={data} matches={matches} metric={filters.metric} unit={unit} onMetric={onMetric} />}
     </DashboardRequest>
   </section>;
 }
