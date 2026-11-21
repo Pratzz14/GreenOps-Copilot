@@ -1,7 +1,9 @@
+import { tableCreation } from './journeyMetadata';
 import { lazy, Suspense, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { components } from './api/schema';
 import { CatalogRow, LayerDisclosure, LayerSummary } from './LayerOverview';
+import { chfFormat as chf, formatCount as number, formatExactNumber } from './numberFormat';
 
 const Chart = lazy(() => import('./AnalysisChart'));
 type Models = components['schemas'];
@@ -9,8 +11,6 @@ type Overview = Models['SilverOverview'];
 type Row = Models['Page']['items'][number];
 type Scope = 'full' | 'baseline';
 const labels = (value: string) => value.replaceAll('_', ' ');
-const number = (value: number) => value.toLocaleString('en-CH');
-const chf = new Intl.NumberFormat('en-CH', { style: 'currency', currency: 'CHF' });
 
 const cleaningSteps: Partial<Record<string, string[]>> = {
   azure_costs: [
@@ -73,39 +73,6 @@ const cleaningSteps: Partial<Record<string, string[]>> = {
   ],
 };
 
-const tableCreation: Partial<Record<string, { reason: string; method: string; inputs: string[] }>> = {
-  cost_facts: {
-    reason: 'Brings provider charges, gateway costs and contract amounts together for a reconciled CHF subtotal.',
-    method: 'Appended one row per source charge, used monthly exchange rates for foreign amounts, and recorded each row’s baseline eligibility.',
-    inputs: ['azure_costs', 'aws_costs', 'hoster_invoice', 'ai_usage', 'ai_subscriptions', 'saas_contracts', 'exchange_rates'],
-  },
-  usage_facts: {
-    reason: 'Brings platform activity, weekly server readings and AI usage into one table so they can be explored together.',
-    method: 'Appended observations from the three inputs, selected the usage fields, and labeled each row with its usage type and source record.',
-    inputs: ['data_platform_usage', 'server_metrics_weekly', 'ai_usage'],
-  },
-  assets: {
-    reason: 'Provides a shared server inventory reference for linking usage and billing records to assets.',
-    method: 'Published the cleaned inventory rows as the asset reference, carrying over the snapshot date and available ownership evidence.',
-    inputs: ['server_inventory'],
-  },
-  contracts: {
-    reason: 'Puts AI and SaaS contracts side by side for monthly comparison.',
-    method: 'Appended contract rows from both inputs, keeping the reporting month and the Draft or Final status of each version.',
-    inputs: ['ai_subscriptions', 'saas_contracts'],
-  },
-  ownership: {
-    reason: 'Provides a shared reference for linking resources and cost centers to departments.',
-    method: 'Used unambiguous resource mappings to create resource ownership rows and one row per distinct cost-center and department pair. Kept ambiguous or unresolved ownership visible.',
-    inputs: ['mapping_departments_tools'],
-  },
-  resource_relationships: {
-    reason: 'Shows how billed resources relate to inventory assets and how strong the supporting evidence is.',
-    method: 'Compared billed resource IDs with server IDs and billing providers with inventory providers. Used ownership mappings as supporting evidence and kept candidate links and unresolved pools visible.',
-    inputs: ['azure_costs', 'aws_costs', 'hoster_invoice', 'server_inventory', 'mapping_departments_tools'],
-  },
-};
-
 async function read<T extends { version: string }>(path: string, signal: AbortSignal, version?: string): Promise<T> {
   const url = new URL('/api/v1/silver' + path, window.location.origin);
   if (version) url.searchParams.set('version', version);
@@ -139,9 +106,9 @@ function Result<T>({ query, children }: {
   return children(query.data);
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  const [open, setOpen] = useState(false);
-  return <details className="panel analysis-section" onToggle={event => setOpen(event.currentTarget.open)}>
+function Section({ title, children, defaultOpen = false }: { title: string; children: ReactNode; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return <details className="panel analysis-section" open={open} onToggle={event => setOpen(event.currentTarget.open)}>
     <summary>{title}</summary>
     {open && <div className="analysis-section-content">{children}</div>}
   </details>;
@@ -161,7 +128,11 @@ function Grid({ rows, fields, choose }: { rows: Row[]; fields: string[]; choose?
     <thead><tr>{choose && <th scope="col">Lineage</th>}{fields.map(field => <th key={field} scope="col">{labels(field)}</th>)}</tr></thead>
     <tbody>{rows.map((row, index) => <tr key={index}>
       {choose && <td>{row.record_id && <button onClick={() => choose(String(row.record_id))}>Inspect row {row.source_row}</button>}</td>}
-      {fields.map(field => <td key={field}>{row[field] == null || row[field] === '' ? '—' : String(row[field])}</td>)}
+      {fields.map(field => {
+        const value = row[field];
+        return <td key={field}>{value == null || value === '' ? '—' :
+          typeof value === 'number' ? formatExactNumber(value) : String(value)}</td>;
+      })}
     </tr>)}</tbody>
   </table></div>;
 }
@@ -169,12 +140,12 @@ function Grid({ rows, fields, choose }: { rows: Row[]; fields: string[]; choose?
 function Pagination({ page, setOffset }: { page: Models['Page']; setOffset: (offset: number) => void }) {
   return <div className="pagination">
     <button disabled={!page.offset} onClick={() => setOffset(page.offset - page.limit)}>Previous</button>
-    <span>{page.total ? `${page.offset + 1}–${Math.min(page.total, page.offset + page.limit)} of ${number(page.total)}` : '0 records'}</span>
+    <span>{page.total ? `${number(page.offset + 1)}–${number(Math.min(page.total, page.offset + page.limit))} of ${number(page.total)}` : '0 records'}</span>
     <button disabled={page.offset + page.limit >= page.total} onClick={() => setOffset(page.offset + page.limit)}>Next</button>
   </div>;
 }
 
-export default function Silver() {
+export default function Silver({ initialTable }: { initialTable?: string }) {
   const overview = useQuery({
     queryKey: ['silver', 'current'],
     queryFn: ({ signal }) => read<Overview>('', signal),
@@ -185,11 +156,11 @@ export default function Silver() {
       <h1>Silver overview</h1>
       <p>Cleaned data linked back to its original sources.</p>
     </header>
-    <Result query={overview}>{data => <SilverDetails key={data.version} data={data} />}</Result>
+    <Result query={overview}>{data => <SilverDetails key={data.version} data={data} initialTable={data.tables.find(table => table.table === initialTable)?.table} />}</Result>
   </div>;
 }
 
-function SilverDetails({ data }: { data: Overview }) {
+function SilverDetails({ data, initialTable }: { data: Overview; initialTable?: string }) {
   const [scope, setScope] = useState<Scope>('full');
   const [record, setRecord] = useState('');
   const [lineageOpen, setLineageOpen] = useState(false);
@@ -215,7 +186,7 @@ function SilverDetails({ data }: { data: Overview }) {
       <LayerDisclosure title="Browse Silver tables" description="Review cleaning steps for source tables and why each new table was created.">
         {() => <SilverCatalog tables={data.tables} />}
       </LayerDisclosure>
-      <LayerDisclosure title="Explore data and costs" description="Inspect rows, compare with Bronze and reconcile the cost subtotal.">
+      <LayerDisclosure defaultOpen={!!initialTable} title="Explore data and costs" description="Inspect rows, compare with Bronze and reconcile the cost subtotal.">
         {open => open && <section className="exploration" aria-label="Silver data and cost analysis">
           <div className="analysis-toolbar">
             <div className="segmented" aria-label="Silver analysis period">
@@ -225,7 +196,7 @@ function SilverDetails({ data }: { data: Overview }) {
             <p>Baseline includes inventory snapshot context and full overlapping weeks.</p>
           </div>
           <div className="analysis-sections">
-            <Section title="Cleaned table browser"><Browser key={scope} data={data} scope={scope} inspect={inspect} /></Section>
+            <Section title="Cleaned table browser" defaultOpen={!!initialTable}><Browser key={scope} initialTable={initialTable} data={data} scope={scope} inspect={inspect} /></Section>
             <details className="panel analysis-section" open={lineageOpen} onToggle={event => setLineageOpen(event.currentTarget.open)}>
               <summary>Lineage and evidence</summary>
               {lineageOpen && <div className="analysis-section-content"><Lineage version={data.version} record={record} select={setRecord} /></div>}
@@ -295,8 +266,8 @@ function SilverCatalog({ tables }: { tables: Overview['tables'] }) {
   </div>;
 }
 
-function Browser({ data, scope, inspect }: { data: Overview; scope: Scope; inspect: (id: string) => void }) {
-  const [table, setTable] = useState(data.tables[0].table);
+function Browser({ data, scope, inspect, initialTable }: { data: Overview; scope: Scope; inspect: (id: string) => void; initialTable?: string }) {
+  const [table, setTable] = useState(initialTable ?? data.tables[0].table);
   const [status, setStatus] = useState('accepted');
   const [offset, setOffset] = useState(0);
   const query = useSilver<Models['TablePage']>(data.version, `/tables/${table}/rows?scope=${scope}&status=${status}&offset=${offset}`);

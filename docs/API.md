@@ -21,28 +21,8 @@ After snapshotting and restarting, `snapshot_id` is the content SHA-256 and
 `core_source_count` is 13. `data_ready` remains false: hashing sources is not a
 calculated run. Health reports cached startup state, not live disk health.
 
-Planned run, finding, measure, safety, factor, package and export routes are
-registered as HTTP 503 stubs until calculation phases are implemented:
-
-```json
-{
-  "detail": {
-    "code": "not_ready",
-    "message": "Calculated run unavailable. Source snapshotting does not calculate a baseline or package."
-  }
-}
-```
-
 Unknown API routes return JSON HTTP 404. Malformed identifiers and unsupported
-sections/export names return HTTP 422. Valid-looking IDs receive 503 while
-there is no run store; existence checks will follow with calculated runs.
-Template examples are never exposed as completed submission downloads.
-
-Initial `RunIdentity`, `Measurement` and `Overview` contracts define run/package
-identity, data/factor versions, scenario, horizon, period, units, estimate status
-and quality flags. Unknown measurements are JSON null; NaN/infinity are rejected.
-Detailed finding/package contracts remain pending. These are schema definitions,
-not fabricated result fixtures.
+sections or export names return HTTP 422. Unknown measurements are JSON null.
 
 Regenerate frontend types after contract changes:
 
@@ -54,6 +34,31 @@ npm --prefix frontend run generate:api
 Vite proxies `/api` to `http://127.0.0.1:8000`; React uses relative `/api/v1`
 URLs. FastAPI serves the built frontend at `/` and `/assets/`, after API routes.
 Unknown API paths never return frontend HTML. Raw data and outputs are not served.
+
+## Gold runs
+
+Publish Gold against Silver with `python -m src.gold --decision-as-of YYYY-MM-DD`.
+Current results bind to the active Silver version. An absent, stale, or damaged
+publication returns 503 with `not_ready`. Historical published run IDs remain
+readable by ID. Unknown IDs return 404 when Gold has been published.
+
+| Route | Result |
+| --- | --- |
+| `GET /runs/current` | Run, Silver and factor versions, decision date, baseline and package IDs |
+| `GET /runs/{run_id}/overview?scenario=mid` | Recorded CHF, modeled kWh and direct CO₂, plus coverage, imputed CHF, recovered CHF within recorded spending, and the separate Swiss operating CO₂e estimate |
+| `GET /runs/{run_id}/breakdowns?group=department&scenario=mid` | Annual and monthly spend and footprint, with separate imputed CHF and Swiss operating CO₂e. Groups also include tool, provider, location, and subject. |
+| `GET /runs/{run_id}/tables` | The 14 published tables and their row counts for the run |
+| `GET /runs/{run_id}/tables/{table}?limit=25&offset=0` | Column schema and a page of rows from a published table, ordered by primary key. Values preserve their exact text representation, missing values are null, and timestamps are UTC. |
+| `GET /runs/{run_id}/findings`, `/findings/{finding_id}` | Observations, waste hypotheses, and evidence IDs |
+| `GET /runs/{run_id}/measures`, `/safety-decisions`, `/factors` | Measures by scenario and horizon, protection windows, factor sources and ranges |
+| `GET /runs/{run_id}/evidence/{evidence_set_id}?limit=20&offset=0` | Paged source rows, ticket text, factor references and calculations. The maximum page size is 100. |
+| `GET /packages/{package_id}` | Six scenario/horizon scorecards and the package contribution ledger |
+| `GET /packages/{package_id}/exports/{filename}` | `baseline.csv` and `measures.csv` with official headers and project-template order. Use the conditional package ID for its separately labeled draft measures. |
+
+The scorecard uses steady-state annual savings for submission and exposes a
+separate first-year horizon. Conditional packages and their exports use draft
+labels. Provisional results retain missing values. The automatic measures CSV
+contains no data rows when no measure qualifies for modeled selection.
 
 ## Phase 2 profiling API
 
@@ -99,3 +104,51 @@ Money and decimal measurements are JSON strings, preserving CSV precision.
 Null numeric cells are JSON null. The records API uses the logical Bronze
 record number (the header is record 1). The startup loader validates and reads
 the published version once. Requests perform no transformations.
+
+## Silver analysis
+
+All analyst endpoints are under `/api/v1/analysis`. See the generated OpenAPI for
+the request and response schemas.
+
+| Method and path | Response or effect |
+|---|---|
+| GET `/catalog` | Current Silver version, baseline dates, default scope, datasets, fields, join availability and starters |
+| POST `/preview` | Validated SQL for a visual definition, without executing it |
+| POST `/draft` | Optional OpenAI draft and automatic Silver dataset selection, without executing it |
+| POST `/query` | Executes a versioned definition and returns result metadata plus the first 100 rows |
+| GET `/results/{id}?offset=0&limit=100` | Page from the cached result. Page size 1–1,000 |
+| GET `/results/{id}/csv` | CSV attachment of the cached rows, with empty CSV fields for nulls |
+| GET `/results/{id}/metadata` | JSON attachment with SQL, version, scope, types, units, coverage and limits |
+| GET or POST `/saved` | List or create local definitions |
+| PUT or DELETE `/saved/{id}` | Update or delete one local definition |
+
+Every preview and query requires a dataset and Silver version. The definition
+also contains the mode, scope, visual configuration or SQL, and chart settings.
+Missing Silver returns 503, a stale version returns 409, invalid definitions and
+unavailable joins return 422, an active query returns 429, and a timed-out query
+returns 408. A missing or expired result returns 404.
+
+SQL allows one SELECT with non-recursive CTEs and subqueries over the selected
+dataset. The API checks the parsed statement and runs it in an isolated DuckDB
+process with one active query, two engine threads, a 256 MB engine memory limit,
+and a five-second execution budget after dataset loading. The worker is
+discarded after each run. External access and extension autoloading are disabled.
+
+The API materializes at most 10,000 rows and caches ten completed results for 15
+minutes. Charts use at most 1,000 returned rows. Decimal result values are
+serialized as exact decimal strings when DuckDB returns DECIMAL. DuckDB AVG
+and division can return floating-point values, as shown by their result types.
+SQL expressions with undetermined units are marked **Unverified**. For financial
+reconciliation, use DECIMAL subtotals with explicit CHF fields and the default
+eligibility scope. The coverage object describes the scoped dataset before
+query-specific filters. Aggregate coverage within a query can be computed from
+financial disposition fields.
+
+Analyses and exports are exploratory. The query process operates on a
+manifest-validated view of the startup Silver version and writes no layer data.
+
+The catalog exposes `ai_configured` as a boolean. `/draft` accepts a Silver
+version, scope, and question. It sends available dataset schemas and scope
+with the question to OpenAI, then checks the chosen dataset and SQL against the local read-only
+rules and field names. The response carries a draft and explanation, or null
+SQL when the question cannot be answered from the current dataset.

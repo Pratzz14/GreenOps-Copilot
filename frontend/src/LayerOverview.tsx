@@ -19,15 +19,16 @@ export function LayerSummary({ label, metrics, children }: {
   </section>;
 }
 
-export function LayerDisclosure({ title, description, children }: {
+export function LayerDisclosure({ title, description, children, defaultOpen = false }: {
   title: string;
   description: string;
   children: (open: boolean) => ReactNode;
+  defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  const [visited, setVisited] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
+  const [visited, setVisited] = useState(defaultOpen);
 
-  return <details className="layer-disclosure" onToggle={event => {
+  return <details className="layer-disclosure" open={open} onToggle={event => {
     const next = event.currentTarget.open;
     setOpen(next);
     if (next) setVisited(true);
@@ -39,16 +40,20 @@ export function LayerDisclosure({ title, description, children }: {
   </details>;
 }
 
-export function CatalogRow({ name, records, findings, children }: {
+export function CatalogRow({ name, records, findings, children, defaultOpen = false }: {
   name: string;
   records: string;
-  findings: string;
-  children: ReactNode;
+  findings?: string;
+  defaultOpen?: boolean;
+  children: ReactNode | (() => ReactNode);
 }) {
-  return <li className="layer-catalog-row">
-    <details>
-      <summary><strong>{name}</strong><span>{records}</span><span>{findings}</span></summary>
-      <div className="layer-catalog-detail">{children}</div>
+  const [open, setOpen] = useState(defaultOpen);
+  const lazy = typeof children === 'function';
+  return <li className={findings === undefined ? 'layer-catalog-row layer-catalog-row-simple' : 'layer-catalog-row'}>
+    <details open={lazy ? open : undefined} onToggle={lazy ? event => setOpen(event.currentTarget.open) : undefined}>
+      <summary><strong>{name}</strong><span>{records}</span>{findings !== undefined ? <span>{findings}</span> : null}</summary>
+      {lazy ? open && <div className="layer-catalog-detail">{children()}</div> :
+        <div className="layer-catalog-detail">{children}</div>}
     </details>
   </li>;
 }

@@ -14,11 +14,12 @@ const path = require('node:path');
       page.on('console', message => {
         if (['error', 'warning'].includes(message.type())) errors.push(message.text());
       });
-      await page.goto(url);
+      await page.goto(url + '/data-explorer');
       await page.getByRole('tab', { name: 'Silver' }).click();
       const silver = page.getByRole('tabpanel', { name: 'Silver' });
       await expect(silver.getByRole('heading', { name: 'Silver overview' })).toBeVisible();
       await expect(silver.getByText('Ready with unresolved issues')).toBeVisible({ timeout: 20000 });
+      await expect(silver.getByRole('region', { name: 'Silver build summary' }).getByText(/^CHF\s+463['’]471\.49$/)).toBeVisible();
       await expect(silver.getByText('Financial coverage is incomplete.', { exact: false })).toBeVisible();
       await expect(silver.locator('details[open]')).toHaveCount(0);
       await expect(silver.getByLabel('Silver table catalog')).toHaveCount(0);
@@ -95,7 +96,9 @@ const path = require('node:path');
       await expect(silver.getByText('agrees with total', { exact: true })).toBeVisible();
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
       await page.getByRole('tab', { name: 'Gold' }).click();
-      await expect(page.getByRole('tabpanel', { name: 'Gold' })).toContainText('Not built yet');
+      await expect(page.getByRole('tabpanel', { name: 'Gold' }).getByRole('heading', {
+        name: 'Business insights and decisions.',
+      })).toBeVisible();
       assert.deepEqual(errors, []);
       await page.close();
     }

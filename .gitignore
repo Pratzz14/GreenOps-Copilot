@@ -28,10 +28,12 @@ dist/
 Thumbs.db
 .DS_Store
 
-# Local runtime log and nested upstream Git metadata
-/debug.log
-/sprintd-basel-green-ai-data/.git/
+# Local runtime logs and separate upstream dataset checkout
+debug.log
+/sprintd-basel-green-ai-data/
 
 # Generated Silver layer
 /data/silver/*
 !/data/silver/.gitkeep
+/data/gold/*
+!/data/gold/.gitkeep

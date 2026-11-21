@@ -55,15 +55,83 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/runs/{run_id}/{section}": {
+    "/api/v1/runs/{run_id}/breakdowns": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Run Section */
-        get: operations["run_section_api_v1_runs__run_id___section__get"];
+        /** Breakdowns */
+        get: operations["breakdowns_api_v1_runs__run_id__breakdowns_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/utilization": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Utilization */
+        get: operations["utilization_api_v1_runs__run_id__utilization_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/tables": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Gold Tables */
+        get: operations["gold_tables_api_v1_runs__run_id__tables_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/tables/{table}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Gold Table */
+        get: operations["gold_table_api_v1_runs__run_id__tables__table__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/findings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Findings */
+        get: operations["findings_api_v1_runs__run_id__findings_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -81,6 +149,74 @@ export interface paths {
         };
         /** Finding */
         get: operations["finding_api_v1_runs__run_id__findings__finding_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/factors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Factors */
+        get: operations["factors_api_v1_runs__run_id__factors_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/measures": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Measures */
+        get: operations["measures_api_v1_runs__run_id__measures_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/safety-decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Safety Decisions */
+        get: operations["safety_decisions_api_v1_runs__run_id__safety_decisions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/evidence/{evidence_set_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Evidence */
+        get: operations["evidence_api_v1_runs__run_id__evidence__evidence_set_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -276,6 +412,161 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/analysis/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Catalog */
+        get: operations["get_catalog_api_v1_analysis_catalog_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/analysis/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Draft Query */
+        post: operations["draft_query_api_v1_analysis_draft_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/analysis/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview */
+        post: operations["preview_api_v1_analysis_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/analysis/query": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run */
+        post: operations["run_api_v1_analysis_query_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/analysis/results/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Page */
+        get: operations["page_api_v1_analysis_results__key__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/analysis/results/{key}/metadata": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Metadata */
+        get: operations["export_metadata_api_v1_analysis_results__key__metadata_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/analysis/results/{key}/csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Csv */
+        get: operations["export_csv_api_v1_analysis_results__key__csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/analysis/saved": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Saved */
+        get: operations["saved_api_v1_analysis_saved_get"];
+        put?: never;
+        /** Save */
+        post: operations["save_api_v1_analysis_saved_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/analysis/saved/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update */
+        put: operations["update_api_v1_analysis_saved__key__put"];
+        post?: never;
+        /** Delete */
+        delete: operations["delete_api_v1_analysis_saved__key__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -302,6 +593,22 @@ export interface components {
             /** Count */
             count: number;
         };
+        /** Catalog */
+        Catalog: {
+            /** Version */
+            version: string;
+            /** Baseline Start */
+            baseline_start: string;
+            /** Baseline End */
+            baseline_end: string;
+            defaults: components["schemas"]["Scope"];
+            /** Datasets */
+            datasets: components["schemas"]["Dataset"][];
+            /** Starters */
+            starters: components["schemas"]["Starter"][];
+            /** Ai Configured */
+            ai_configured: boolean;
+        };
         /** CatalogEntry */
         CatalogEntry: {
             /** Table */
@@ -320,6 +627,25 @@ export interface components {
             transformations: {
                 [key: string]: number;
             };
+        };
+        /** Chart */
+        Chart: {
+            /**
+             * Kind
+             * @default bar
+             * @enum {string}
+             */
+            kind: "bar" | "line" | "scatter" | "histogram";
+            /**
+             * X
+             * @default
+             */
+            x: string;
+            /**
+             * Y
+             * @default
+             */
+            y: string;
         };
         /** ColumnProfile */
         ColumnProfile: {
@@ -372,6 +698,72 @@ export interface components {
             /** Cadence */
             cadence: string;
         };
+        /** Dataset */
+        Dataset: {
+            /** Name */
+            name: string;
+            /** Purpose */
+            purpose: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "source" | "connected" | "prepared";
+            /** Grain */
+            grain: string;
+            /** Fields */
+            fields: components["schemas"]["DatasetField"][];
+            /** Limitations */
+            limitations: string[];
+            /** Unavailable */
+            unavailable: string | null;
+            /** Date Context */
+            date_context: string;
+            /** Inputs */
+            inputs: string[];
+        };
+        /** DatasetField */
+        DatasetField: {
+            /** Name */
+            name: string;
+            /** Type */
+            type: string;
+            /** Unit */
+            unit: string | null;
+            /** Unit Key */
+            unit_key: string | null;
+        };
+        /** Definition */
+        Definition: {
+            /** Version */
+            version: string;
+            /** Dataset */
+            dataset: string;
+            filters?: components["schemas"]["Scope"];
+            /**
+             * Mode
+             * @default visual
+             * @enum {string}
+             */
+            mode: "visual" | "sql";
+            visual?: components["schemas"]["Visual"];
+            /**
+             * Sql
+             * @default
+             */
+            sql: string;
+            chart?: components["schemas"]["Chart"];
+        };
+        /** Dimension */
+        Dimension: {
+            /** Field */
+            field: string;
+            /**
+             * Month
+             * @default false
+             */
+            month: boolean;
+        };
         /** Distribution */
         Distribution: {
             /** Label */
@@ -388,6 +780,23 @@ export interface components {
             median: number;
             /** Histogram */
             histogram: components["schemas"]["Bin"][];
+        };
+        /** Draft */
+        Draft: {
+            /** Dataset */
+            dataset: string | null;
+            /** Sql */
+            sql: string | null;
+            /** Explanation */
+            explanation: string;
+        };
+        /** DraftRequest */
+        DraftRequest: {
+            /** Version */
+            version: string;
+            filters?: components["schemas"]["Scope"];
+            /** Question */
+            question: string;
         };
         /** ErrorDetail */
         ErrorDetail: {
@@ -412,6 +821,50 @@ export interface components {
                 [key: string]: string;
             };
         };
+        /** EvidenceItem */
+        EvidenceItem: {
+            /** Evidence Type */
+            evidence_type: string;
+            /** Source File */
+            source_file: string | null;
+            /** Source Row */
+            source_row: number | null;
+            /** Source Record Id */
+            source_record_id: string | null;
+            /** Detail */
+            detail: string;
+            /** Factor Id */
+            factor_id: string | null;
+            /** Factor Name */
+            factor_name: string | null;
+            /** Source Reference */
+            source_reference: string | null;
+        };
+        /** EvidencePage */
+        EvidencePage: {
+            /** Run Id */
+            run_id: string;
+            /** Evidence Set Id */
+            evidence_set_id: string;
+            /** Total */
+            total: number;
+            /** Offset */
+            offset: number;
+            /** Items */
+            items: components["schemas"]["EvidenceItem"][];
+        };
+        /** Filter */
+        Filter: {
+            /** Field */
+            field: string;
+            /**
+             * Op
+             * @enum {string}
+             */
+            op: "eq" | "in" | "contains" | "lt" | "lte" | "gt" | "gte" | "range" | "null" | "not_null";
+            /** Values */
+            values?: string[];
+        };
         /** Gap */
         Gap: {
             /** Entity */
@@ -422,6 +875,402 @@ export interface components {
             baseline_absent_periods: string[];
             /** Certainty */
             certainty: string;
+        };
+        /** GoldBreakdown */
+        GoldBreakdown: {
+            /** Report Month */
+            report_month: string | null;
+            /** Driver */
+            driver: string;
+            /** Recorded Cost Chf */
+            recorded_cost_chf: string | null;
+            /** Imputed Cost Chf */
+            imputed_cost_chf?: string | null;
+            /** Recovered Cost Chf */
+            recovered_cost_chf?: string | null;
+            /** Swiss Operating Kg Co2E */
+            swiss_operating_kg_co2e?: string | null;
+            /** Estimated Kwh */
+            estimated_kwh: string | null;
+            /** Estimated Location Kg */
+            estimated_location_kg: string | null;
+            /** Unresolved Cost Rows */
+            unresolved_cost_rows: number;
+            /** Incomplete Energy Buckets */
+            incomplete_energy_buckets: number;
+            /** Incomplete Carbon Buckets */
+            incomplete_carbon_buckets: number;
+            /** Spend Rank */
+            spend_rank: number | null;
+            /** Emissions Rank */
+            emissions_rank: number | null;
+        };
+        /** GoldFactor */
+        GoldFactor: {
+            /** Factor Id */
+            factor_id: string;
+            /** Factor Name */
+            factor_name: string;
+            /** Submission Parameter */
+            submission_parameter: string | null;
+            /** Location */
+            location: string | null;
+            /** Value Low */
+            value_low: string | null;
+            /** Value Mid */
+            value_mid: string | null;
+            /** Value High */
+            value_high: string | null;
+            /** Value Text */
+            value_text: string | null;
+            /** Unit */
+            unit: string;
+            /** Source Reference */
+            source_reference: string;
+            /** Source Date */
+            source_date: string | null;
+            /** Definition And Rationale */
+            definition_and_rationale: string;
+        };
+        /** GoldFinding */
+        GoldFinding: {
+            /** Finding Id */
+            finding_id: string;
+            /** Subject Name */
+            subject_name: string;
+            /** Category */
+            category: string;
+            /** Observed Start */
+            observed_start: string | null;
+            /** Observed End Exclusive */
+            observed_end_exclusive: string | null;
+            /** Observed Fact */
+            observed_fact: string;
+            /** Waste Hypothesis */
+            waste_hypothesis: string;
+            /** Verification Status */
+            verification_status: string;
+            /** Confidence */
+            confidence: string;
+            /** Evidence Set Id */
+            evidence_set_id: string;
+        };
+        /** GoldMeasure */
+        GoldMeasure: {
+            /** Measure Id */
+            measure_id: string;
+            /** Subject Name */
+            subject_name: string;
+            /** Description */
+            description: string;
+            /** Proposed Change */
+            proposed_change: string;
+            /** Earliest Effective Date */
+            earliest_effective_date: string | null;
+            /** Notice Deadline */
+            notice_deadline: string | null;
+            /** Effort Person Days */
+            effort_person_days: string | null;
+            /** One Time Cash Chf */
+            one_time_cash_chf: string | null;
+            /**
+             * Safety Status
+             * @enum {string}
+             */
+            safety_status: "eligible" | "human_review" | "blocked";
+            /** Responsible Role */
+            responsible_role: string | null;
+            /** Risks And Exceptions */
+            risks_and_exceptions: string;
+            /** Evidence Set Id */
+            evidence_set_id: string;
+            /** Estimates */
+            estimates: components["schemas"]["GoldScenario"][];
+        };
+        /** GoldMember */
+        GoldMember: {
+            /** Measure Id */
+            measure_id: string;
+            /** Description */
+            description: string;
+            /**
+             * Scenario
+             * @enum {string}
+             */
+            scenario: "low" | "mid" | "high";
+            /**
+             * Horizon
+             * @enum {string}
+             */
+            horizon: "first_year" | "steady_state";
+            /** Credited Cost Chf */
+            credited_cost_chf: string;
+            /** Credited Energy Kwh */
+            credited_energy_kwh: string;
+            /** Credited Location Kg */
+            credited_location_kg: string;
+            /** Credited Implementation Chf */
+            credited_implementation_chf: string;
+            /** Evidence Set Id */
+            evidence_set_id: string;
+        };
+        /** GoldOverview */
+        GoldOverview: {
+            context: components["schemas"]["RunIdentity"];
+            cost: components["schemas"]["Measurement"];
+            energy: components["schemas"]["Measurement"];
+            emissions: components["schemas"]["Measurement"];
+            /** Imputed Cost Chf */
+            imputed_cost_chf?: string | null;
+            /** Recovered Cost Chf */
+            recovered_cost_chf?: string | null;
+            /** Swiss Operating Kg Co2E */
+            swiss_operating_kg_co2e?: string | null;
+            /**
+             * Cost Coverage
+             * @enum {string}
+             */
+            cost_coverage: "complete" | "partial" | "unknown";
+            /**
+             * Energy Coverage
+             * @enum {string}
+             */
+            energy_coverage: "complete" | "partial" | "unknown";
+            /**
+             * Carbon Coverage
+             * @enum {string}
+             */
+            carbon_coverage: "complete" | "partial" | "unknown";
+            /** Included Rows */
+            included_rows: number;
+            /** Missing Amount Rows */
+            missing_amount_rows: number;
+            /** Missing Fx Rows */
+            missing_fx_rows: number;
+            /** Review Rows */
+            review_rows: number;
+            /** Evidence Set Id */
+            evidence_set_id: string;
+        };
+        /** GoldPackage */
+        GoldPackage: {
+            /** Run Id */
+            run_id: string;
+            /** Package Id */
+            package_id: string;
+            /**
+             * Package Kind
+             * @enum {string}
+             */
+            package_kind: "automatic" | "conditional";
+            /**
+             * Selection Status
+             * @enum {string}
+             */
+            selection_status: "pending" | "provisional" | "feasible" | "infeasible";
+            /** Candidate Set Note */
+            candidate_set_note: string;
+            /** Evidence Set Id */
+            evidence_set_id: string;
+            /**
+             * Emissions Basis
+             * @enum {string}
+             */
+            emissions_basis: "CO2" | "CO2e";
+            /** Cost Target */
+            cost_target: string;
+            /** Carbon Target */
+            carbon_target: string;
+            /** Implementation Cap Chf */
+            implementation_cap_chf: string;
+            /** Scores */
+            scores: components["schemas"]["GoldScore"][];
+            /** Members */
+            members: components["schemas"]["GoldMember"][];
+        };
+        /** GoldProtection */
+        GoldProtection: {
+            /** Subject Name */
+            subject_name: string;
+            /** Rule Key */
+            rule_key: string;
+            /** Action Scope */
+            action_scope: string;
+            /** Starts At */
+            starts_at: string | null;
+            /** Ends At */
+            ends_at: string | null;
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "blocked" | "human_review" | "conditions_apply";
+            /** Responsible Role */
+            responsible_role: string | null;
+            /** Reason */
+            reason: string;
+            /** Evidence Set Id */
+            evidence_set_id: string;
+        };
+        /** GoldRun */
+        GoldRun: {
+            /** Run Id */
+            run_id: string;
+            /** Data Version */
+            data_version: string;
+            /** Factor Version */
+            factor_version: string;
+            /** Package Id */
+            package_id: string;
+            /**
+             * Scenario
+             * @enum {string}
+             */
+            scenario: "low" | "mid" | "high";
+            /**
+             * Horizon
+             * @enum {string}
+             */
+            horizon: "annual_baseline" | "first_year" | "steady_state";
+            /** Period Start */
+            period_start: string;
+            /** Period End */
+            period_end: string;
+            /** Snapshot Id */
+            snapshot_id: string;
+            /**
+             * Decision As Of
+             * Format: date
+             */
+            decision_as_of: string;
+            /** Conditional Package Id */
+            conditional_package_id: string | null;
+        };
+        /** GoldSafety */
+        GoldSafety: {
+            /** Decisions */
+            decisions: components["schemas"]["GoldMeasure"][];
+            /** Protections */
+            protections: components["schemas"]["GoldProtection"][];
+        };
+        /** GoldScenario */
+        GoldScenario: {
+            /**
+             * Scenario
+             * @enum {string}
+             */
+            scenario: "low" | "mid" | "high";
+            /**
+             * Horizon
+             * @enum {string}
+             */
+            horizon: "first_year" | "steady_state";
+            /** Estimate Status */
+            estimate_status: string;
+            /** Net Chf */
+            net_chf: string | null;
+            /** Savings Kwh */
+            savings_kwh: string | null;
+            /** Savings Location Kg */
+            savings_location_kg: string | null;
+            /** Evidence Set Id */
+            evidence_set_id: string;
+        };
+        /** GoldScore */
+        GoldScore: {
+            /**
+             * Scenario
+             * @enum {string}
+             */
+            scenario: "low" | "mid" | "high";
+            /**
+             * Horizon
+             * @enum {string}
+             */
+            horizon: "first_year" | "steady_state";
+            /** Evaluation Start */
+            evaluation_start: string | null;
+            /** Evaluation End Exclusive */
+            evaluation_end_exclusive: string | null;
+            /**
+             * Target Status
+             * @enum {string}
+             */
+            target_status: "conditional" | "unassessed" | "meets_targets" | "misses_targets";
+            /** Meets All Three Scenarios */
+            meets_all_three_scenarios: boolean | null;
+            /** Baseline Cost Chf */
+            baseline_cost_chf: string | null;
+            /** Baseline Energy Kwh */
+            baseline_energy_kwh: string | null;
+            /** Baseline Location Kg */
+            baseline_location_kg: string | null;
+            /** After Cost Chf */
+            after_cost_chf: string | null;
+            /** After Energy Kwh */
+            after_energy_kwh: string | null;
+            /** After Location Kg */
+            after_location_kg: string | null;
+            /** Net Savings Chf */
+            net_savings_chf: string;
+            /** Savings Energy Kwh */
+            savings_energy_kwh: string;
+            /** Savings Location Kg */
+            savings_location_kg: string;
+            /** Implementation Chf */
+            implementation_chf: string;
+            /** Cost Reduction */
+            cost_reduction: string | null;
+            /** Carbon Reduction */
+            carbon_reduction: string | null;
+            /** Cost Margin Chf */
+            cost_margin_chf: string | null;
+            /** Carbon Margin Kg */
+            carbon_margin_kg: string | null;
+            /** Budget Remaining Chf */
+            budget_remaining_chf: string;
+        };
+        /** GoldTableCatalog */
+        GoldTableCatalog: {
+            /** Run Id */
+            run_id: string;
+            /** Tables */
+            tables: components["schemas"]["GoldTableInfo"][];
+        };
+        /** GoldTableColumn */
+        GoldTableColumn: {
+            /** Name */
+            name: string;
+            /** Type */
+            type: string;
+            /** Primary Key */
+            primary_key: boolean;
+        };
+        /** GoldTableInfo */
+        GoldTableInfo: {
+            /** Name */
+            name: string;
+            /** Row Count */
+            row_count: number;
+        };
+        /** GoldTablePage */
+        GoldTablePage: {
+            /** Run Id */
+            run_id: string;
+            /** Table */
+            table: string;
+            /** Row Count */
+            row_count: number;
+            /** Offset */
+            offset: number;
+            /** Limit */
+            limit: number;
+            /** Columns */
+            columns: components["schemas"]["GoldTableColumn"][];
+            /** Items */
+            items: {
+                [key: string]: string | null;
+            }[];
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -537,19 +1386,43 @@ export interface components {
             /** Quality Flags */
             quality_flags: string[];
         };
+        /** Metric */
+        Metric: {
+            /** Name */
+            name: string;
+            /**
+             * Op
+             * @enum {string}
+             */
+            op: "rows" | "count" | "distinct" | "sum" | "mean" | "min" | "max" | "median" | "calculate";
+            /**
+             * Field
+             * @default
+             */
+            field: string;
+            /**
+             * Left
+             * @default
+             */
+            left: string;
+            /**
+             * Right
+             * @default
+             */
+            right: string;
+            /**
+             * Operator
+             * @default /
+             * @enum {string}
+             */
+            operator: "+" | "-" | "*" | "/";
+        };
         /** MonthRows */
         MonthRows: {
             /** Month */
             month: string;
             /** Rows */
             rows: number;
-        };
-        /** Overview */
-        Overview: {
-            context: components["schemas"]["RunIdentity"];
-            cost: components["schemas"]["Measurement"];
-            energy: components["schemas"]["Measurement"];
-            emissions: components["schemas"]["Measurement"];
         };
         /** Page */
         Page: {
@@ -623,6 +1496,51 @@ export interface components {
             /** Limitations */
             limitations: string[];
         };
+        /** ResultMetadata */
+        ResultMetadata: {
+            /** Id */
+            id: string;
+            /** Version */
+            version: string;
+            /** Dataset */
+            dataset: string;
+            filters: components["schemas"]["Scope"];
+            /** Sql */
+            sql: string;
+            /** Fields */
+            fields: components["schemas"]["DatasetField"][];
+            /** Elapsed Ms */
+            elapsed_ms: number;
+            /** Row Count */
+            row_count: number;
+            /** Dataset Rows */
+            dataset_rows: number;
+            /** Coverage */
+            coverage: {
+                [key: string]: number;
+            };
+            /** Truncated */
+            truncated: boolean;
+            /** Requested Limit */
+            requested_limit: number | null;
+            /**
+             * Materialization Limit
+             * @default 10000
+             */
+            materialization_limit: number;
+            /** Lineage Field */
+            lineage_field?: string | null;
+        };
+        /** ResultPage */
+        ResultPage: {
+            metadata: components["schemas"]["ResultMetadata"];
+            /** Offset */
+            offset: number;
+            /** Limit */
+            limit: number;
+            /** Rows */
+            rows: (string | number | boolean | null)[][];
+        };
         /** RunIdentity */
         RunIdentity: {
             /** Run Id */
@@ -647,6 +1565,46 @@ export interface components {
             period_start: string;
             /** Period End */
             period_end: string;
+        };
+        /** SQLPreview */
+        SQLPreview: {
+            /** Sql */
+            sql: string;
+        };
+        /** Saved */
+        Saved: {
+            /** Name */
+            name: string;
+            definition: components["schemas"]["Definition"];
+            /** Id */
+            id: string;
+        };
+        /** SavedInput */
+        SavedInput: {
+            /** Name */
+            name: string;
+            definition: components["schemas"]["Definition"];
+        };
+        /** Scope */
+        Scope: {
+            /**
+             * Period
+             * @default baseline
+             * @enum {string}
+             */
+            period: "baseline" | "full";
+            /**
+             * Disposition
+             * @default accepted
+             * @enum {string}
+             */
+            disposition: "accepted" | "review" | "duplicate" | "quarantined" | "all";
+            /**
+             * Financial
+             * @default eligible
+             * @enum {string}
+             */
+            financial: "eligible" | "all";
         };
         /** SilverOverview */
         SilverOverview: {
@@ -734,6 +1692,15 @@ export interface components {
             date_coverage: components["schemas"]["Coverage"] | null;
             /** Gap Count */
             gap_count: number;
+        };
+        /** Starter */
+        Starter: {
+            /** Name */
+            name: string;
+            /** Dataset */
+            dataset: string;
+            /** Sql */
+            sql: string;
         };
         /** TablePage */
         TablePage: {
@@ -857,6 +1824,29 @@ export interface components {
             /** Joins */
             joins: components["schemas"]["JoinAssessment"][];
         };
+        /** Visual */
+        Visual: {
+            /** Columns */
+            columns?: string[];
+            /** Filters */
+            filters?: components["schemas"]["Filter"][];
+            /** Groups */
+            groups?: components["schemas"]["Dimension"][];
+            /** Metrics */
+            metrics?: components["schemas"]["Metric"][];
+            /**
+             * Sort
+             * @default
+             */
+            sort: string;
+            /**
+             * Descending
+             * @default false
+             */
+            descending: boolean;
+            /** Limit */
+            limit?: number | null;
+        };
     };
     responses: never;
     parameters: never;
@@ -901,10 +1891,19 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RunIdentity"];
+                    "application/json": components["schemas"]["GoldRun"];
                 };
             };
-            /** @description No calculated run exists yet */
+            /** @description Unknown Gold result */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Gold publication is unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -917,7 +1916,9 @@ export interface operations {
     };
     overview_api_v1_runs__run_id__overview_get: {
         parameters: {
-            query?: never;
+            query?: {
+                scenario?: "low" | "mid" | "high";
+            };
             header?: never;
             path: {
                 run_id: string;
@@ -932,7 +1933,16 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Overview"];
+                    "application/json": components["schemas"]["GoldOverview"];
+                };
+            };
+            /** @description Unknown Gold result */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Validation Error */
@@ -944,7 +1954,7 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
-            /** @description No calculated run exists yet */
+            /** @description Gold publication is unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -955,13 +1965,70 @@ export interface operations {
             };
         };
     };
-    run_section_api_v1_runs__run_id___section__get: {
+    breakdowns_api_v1_runs__run_id__breakdowns_get: {
         parameters: {
-            query?: never;
+            query?: {
+                group?: "department" | "tool" | "provider" | "location" | "subject";
+                scenario?: "low" | "mid" | "high";
+            };
             header?: never;
             path: {
                 run_id: string;
-                section: "findings" | "measures" | "safety-decisions" | "factors";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoldBreakdown"][];
+                };
+            };
+            /** @description Unknown Gold result */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Gold publication is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    utilization_api_v1_runs__run_id__utilization_get: {
+        parameters: {
+            query?: {
+                months?: string[] | null;
+                scenario?: "low" | "mid" | "high";
+                group?: "department" | "tool" | "provider" | "location" | "subject";
+                driver?: string;
+                include_estimates?: boolean;
+            };
+            header?: never;
+            path: {
+                run_id: string;
             };
             cookie?: never;
         };
@@ -976,6 +2043,15 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
+            /** @description Unknown Gold result */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -985,7 +2061,158 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
-            /** @description No calculated run exists yet */
+            /** @description Gold publication is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    gold_tables_api_v1_runs__run_id__tables_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoldTableCatalog"];
+                };
+            };
+            /** @description Unknown Gold result */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Gold publication is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    gold_table_api_v1_runs__run_id__tables__table__get: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+                table: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoldTablePage"];
+                };
+            };
+            /** @description Unknown Gold result */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Gold publication is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    findings_api_v1_runs__run_id__findings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoldFinding"][];
+                };
+            };
+            /** @description Unknown Gold result */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Gold publication is unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -1014,7 +2241,16 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["GoldFinding"];
+                };
+            };
+            /** @description Unknown Gold result */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Validation Error */
@@ -1026,7 +2262,207 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
-            /** @description No calculated run exists yet */
+            /** @description Gold publication is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    factors_api_v1_runs__run_id__factors_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoldFactor"][];
+                };
+            };
+            /** @description Unknown Gold result */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Gold publication is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    measures_api_v1_runs__run_id__measures_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoldMeasure"][];
+                };
+            };
+            /** @description Unknown Gold result */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Gold publication is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    safety_decisions_api_v1_runs__run_id__safety_decisions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoldSafety"];
+                };
+            };
+            /** @description Unknown Gold result */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Gold publication is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    evidence_api_v1_runs__run_id__evidence__evidence_set_id__get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+                evidence_set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidencePage"];
+                };
+            };
+            /** @description Unknown Gold result */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Gold publication is unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -1054,7 +2490,16 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["GoldPackage"];
+                };
+            };
+            /** @description Unknown Gold result */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Validation Error */
@@ -1066,7 +2511,7 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
-            /** @description No calculated run exists yet */
+            /** @description Gold publication is unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -1094,8 +2539,15 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
+                content?: never;
+            };
+            /** @description Unknown Gold result */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Validation Error */
@@ -1107,7 +2559,7 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
-            /** @description No calculated run exists yet */
+            /** @description Gold publication is unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -1444,6 +2896,336 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Page"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_catalog_api_v1_analysis_catalog_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Catalog"];
+                };
+            };
+        };
+    };
+    draft_query_api_v1_analysis_draft_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Draft"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_api_v1_analysis_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Definition"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SQLPreview"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_api_v1_analysis_query_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Definition"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    page_api_v1_analysis_results__key__get: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_metadata_api_v1_analysis_results__key__metadata_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultMetadata"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_csv_api_v1_analysis_results__key__csv_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    saved_api_v1_analysis_saved_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Saved"][];
+                };
+            };
+        };
+    };
+    save_api_v1_analysis_saved_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavedInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Saved"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_api_v1_analysis_saved__key__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavedInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Saved"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_api_v1_analysis_saved__key__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

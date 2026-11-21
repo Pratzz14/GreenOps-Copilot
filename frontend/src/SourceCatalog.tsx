@@ -1,5 +1,6 @@
 import { CatalogRow } from './LayerOverview';
 import type { QualityOverview } from './api/quality';
+import { formatCount } from './numberFormat';
 
 type SourceDescription = {
   file: `${string}.csv`;
@@ -33,13 +34,13 @@ export function SourceCatalog({ sources }: { sources: QualityOverview['sources']
           const issues = Object.entries(profile?.issue_counts ?? {});
           return (
             <CatalogRow key={file} name={file}
-              records={profile ? `${profile.rows.toLocaleString('en-US')} records` : 'Count unavailable'}
+              records={profile ? `${formatCount(profile.rows)} records` : 'Count unavailable'}
               findings={profile ? (issues.length ? `${issues.length} issue types` : 'No issues flagged') : 'Issues unavailable'}>
               <p>{row} {relevance}</p>
               <h3>Issues found</h3>
               {issues.length ? <dl className="catalog-findings">
                 {issues.map(([category, count]) => <div key={category}>
-                  <dt>{category.replaceAll('_', ' ')}</dt><dd>{count.toLocaleString('en-US')}</dd>
+                  <dt>{category.replaceAll('_', ' ')}</dt><dd>{formatCount(count)}</dd>
                 </div>)}
               </dl> : <p>{profile ? 'No issues flagged.' : 'Source issue counts are unavailable.'}</p>}
             </CatalogRow>

@@ -13,6 +13,9 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings 0",
     "generate:api": "openapi-typescript ../outputs/openapi.json -o src/api/schema.ts",
+    "test:dashboard": "node e2e/dashboard.cjs",
+    "test:gold": "node e2e/gold.cjs",
+    "test:workspace": "node e2e/analyst-workspace.cjs",
     "test:eda": "node e2e/analysis.cjs"
   },
   "dependencies": {

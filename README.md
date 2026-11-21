@@ -3,10 +3,9 @@
 Traceable GreenOps decisions for the sprintd Basel Green AI & Data case.
 Stack: deterministic Python engine, FastAPI, React + TypeScript + Vite.
 
-The local setup is runnable. The main page is the Phase 2 exploratory analysis
-dashboard: 13 source profiles, quality charts, baseline/full-export views,
-measurement distributions by original unit/currency and source evidence. Calculated baselines, findings, measures and exports belong
-to later phases and currently return explicit `not_ready` responses.
+The local app opens the Gold Dashboard when a validated run is published.
+Data Explorer includes profiles for the 13 core sources, cleaned Silver data,
+and the Gold calculation tables. See **Build and verify Gold** for the pipeline.
 
 ## Supported environment
 
@@ -184,8 +183,88 @@ through 2026-08-31. Missing costs and rates stay blank and financial coverage is
 reported separately from build readiness. Contract months remain monthly for
 annual billing cycles. Usage observations carry no additional cost. The GPU
 alias remains a candidate and the test pool has no instance allocations.
-Gold is still marked **Not built yet**.
+Publish Gold after Silver reconciliation to see the case baseline, findings,
+measures, and submission exports.
 
 Run Silver browser regression against the built app with
 `node frontend/e2e/silver.cjs` and set `EDA_URL` if the server uses a different
 local port.
+
+## Silver Analyst Workspace
+
+Open **Analyst Workspace** at `/analysis` to build visual queries or write a
+read-only DuckDB SELECT over one Silver dataset. Open **Data Explorer** at
+`/data-explorer` to inspect the underlying data layers.
+
+- The catalog contains 19 Silver tables and three fixed joins. Connected tables
+  can repeat records from cleaned sources. Use `cost_facts` for reconciliation.
+- Visual supports typed filters, multiple grouping dimensions, aggregate and
+  row-level arithmetic metrics, and explicit sorting and limits. **Open in SQL**
+  copies the generated query into an editable buffer.
+- The baseline, accepted disposition and eligible cost amounts are the defaults.
+  Ineligible monetary values are masked, and missing costs remain null. Coverage
+  describes the scoped dataset before query-specific filters.
+- Save definitions locally in `outputs/saved_analyses.json`. Opening one requires
+  an explicit rerun. A changed Silver version requires a confirmed rebase.
+- Download exploratory CSV and JSON metadata from the same cached result.
+  Run the browser regression with `npm --prefix frontend run test:workspace`.
+
+See [the API contract](docs/API.md#silver-analysis) and [demo walkthrough](docs/DEMO.md#silver-analyst-workspace-demo).
+
+### Draft SQL with OpenAI
+
+Describe the analysis you want in the question box. AI chooses a Silver dataset and the relevant fields.
+Review the draft in the editable SQL pane and run it when ready. The request
+sends the question, available schemas, and scope to OpenAI without Silver rows.
+
+Add the key to the ignored `.env` file in the project root.
+
+```dotenv
+OPENAI_API_KEY=your_key_here
+```
+
+Reload the workspace after saving the file to enable **Draft SQL**. A backend environment variable
+overrides the file. Set `OPENAI_ANALYSIS_MODEL` to override the default
+`gpt-4.1-mini`. The direct SQL editor and Visual builder are available without
+an API key.
+
+## Build and verify Gold
+
+After publishing Silver, build the Gold run for the case decision date.
+
+```powershell
+.\.venv\Scripts\python.exe -m src.gold --decision-as-of 2026-11-21
+```
+
+The command validates the current Silver snapshot, loads 14 Gold tables into
+DuckDB, reconciles package contributions, and checks both official CSV layouts.
+Identical inputs reuse the same immutable run. Each run is in
+`data/gold/<run_id>/` and `outputs/current_gold.csv` selects the active run.
+Build again after publishing a new Silver version.
+
+Pass `--estimate-missing-costs` to use OpenAI for charges the local unit-price
+imputation leaves open. Set `OPENAI_API_KEY` in the environment or project
+`.env`. The model receives relative month offsets and price-consistency
+categories. Gold calculates the amount locally and records the chosen method
+and comparison bills in its evidence. Set `OPENAI_COST_MODEL` to override the
+default `gpt-4.1-mini`.
+
+The app opens **Dashboard** at `/dashboard`. The report shows the company-wide
+baseline, linked footprint charts, the savings package, and decisions that
+require human review. Choose a ranking row to focus the monthly trend. The
+chart filters leave the baseline and package at company-wide scope.
+Run `npm --prefix frontend run test:dashboard` against the combined local app.
+
+Open **Gold** in **Data Explorer** to see the baseline and browse all 14
+published tables. Expand a table to inspect its schema and records. Open
+**Detailed overview** for spending breakdowns, findings, safety decisions, and
+the savings package. The scorecard defaults to the mid
+steady-state scenario used in the exports. Switch to **First 12 months** to
+see the effect of lead times and effective dates. On the sample data the exports are drafts because coverage is partial. The
+measures CSV lists selected evidence-eligible estimates. Download the
+conditional draft separately to review the package that includes
+proposals with remaining verification steps.
+
+Run `npm --prefix frontend run test:gold` against the combined local app.
+Set `EDA_URL` for a port other than 8001. [Demo](docs/DEMO.md#gold-layer-demo) ·
+[Gold contract](docs/GOLD_LAYER.md) · [Coverage limitations](docs/LIMITATIONS.md).

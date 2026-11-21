@@ -29,7 +29,7 @@ REL_FIELDS = ('resource_id', 'server_id', 'record_id', 'mapping_record_id', 'evi
 DERIVED_SCHEMAS = {
     'cost_facts': (*META, 'provider', 'charge_type', 'resource_id', 'cost_center', 'tool',
                    'reported_department', 'owner_department', 'consumer_department', 'reporting_department',
-                   'amount_original', 'currency', 'fx_rate', 'fx_record_id', 'cost_chf',
+                   'amount_original', 'currency', 'fx_rate', 'fx_record_id', 'cost_chf', 'matched_missing_record_id',
                    'financial_status', 'baseline_eligible'),
     'usage_facts': (*META, 'usage_kind', 'resource_id', 'server_id', 'inventory_record_id',
                     'owner_department', 'consumer_department', 'reporting_department', 'region',
@@ -228,6 +228,25 @@ def resolve_collisions(records):
     for group in groups.values():
         if len(group) < 2:
             continue
+        # At the documented aggregate grain, an exact priced mirror can
+        # resolve the omitted value without adding a second charge.
+        if len(group) == 2 and group[0].table in {'azure_costs', 'aws_costs'}:
+            first, second = group
+            amount_field = SPECS[f'{first.table}.csv'].amount
+            amount_key = slug(amount_field)
+            same_line = all(first.raw[field] == second.raw[field] for field in first.raw if field != amount_field)
+            recorded = [r for r in group if r.row.get(amount_key) is not None]
+            missing = [r for r in group if not r.raw[amount_field].strip()]
+            if same_line and len(recorded) == len(missing) == 1 and all(
+                r.row['record_status'] == 'accepted' for r in group
+            ):
+                priced, incomplete = recorded[0], missing[0]
+                incomplete.disposition('duplicate', 'Exact billing mirror with the amount present on its counterpart.')
+                incomplete.set('duplicate_of', priced.id, 'recover_recorded_charge',
+                               'Count the verified charge once using its priced source row.', priced.id)
+                priced.set('matched_missing_record_id', incomplete.id, 'recover_recorded_charge',
+                           'This priced line resolves the otherwise identical missing-amount mirror.', incomplete.id)
+                continue
         raw_keys = {source_key(record, raw=True) for record in group}
         identical = len({tuple(record.raw.values()) for record in group}) == 1
         code = ('normalized_key_collision' if len(raw_keys) > 1 else
@@ -401,6 +420,7 @@ def financial_facts(tables):
                                                        'consumer_department', 'reporting_department')},
                 amount_original=amount, currency=currency, fx_rate=rate,
                 fx_record_id=fx_record.id if fx_record else None, cost_chf=cost,
+                matched_missing_record_id=row.get('matched_missing_record_id'),
                 financial_status=status, baseline_eligible=row['baseline_eligible']))
     return facts
 

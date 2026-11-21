@@ -76,6 +76,23 @@ def test_fx_credit_zero_missing_and_decimal_reconciliation():
     assert all(row['agrees_with_total'] for row in grouped)
 
 
+def test_recover_exact_priced_aggregate_mirror():
+    priced = adapted('azure_costs', Date='2026-03-04', CostInBillingCurrency='12', BillingCurrency='CHF')
+    missing = adapted('azure_costs', 3, Date='2026-03-04', CostInBillingCurrency='', BillingCurrency='CHF')
+    resolve_collisions([missing, priced])
+    facts = financial_facts({'exchange_rates': [], 'azure_costs': [missing, priced]})
+    assert missing.row['duplicate_of'] == priced.id
+    assert [fact['financial_status'] for fact in facts] == ['duplicate', 'included']
+    assert facts[1]['cost_chf'] == Decimal(12)
+    assert facts[1]['matched_missing_record_id'] == missing.id
+
+    ambiguous = adapted('azure_costs', 4, Date='2026-03-04', CostInBillingCurrency='14', BillingCurrency='CHF')
+    blank = adapted('azure_costs', 5, Date='2026-03-04', CostInBillingCurrency='', BillingCurrency='CHF')
+    other = adapted('azure_costs', 6, Date='2026-03-04', CostInBillingCurrency='12', BillingCurrency='CHF')
+    resolve_collisions([ambiguous, blank, other])
+    assert all(record.row['record_status'] == 'review' for record in (ambiguous, blank, other))
+
+
 def test_period_context_and_timestamp_precision():
     aws = adapted('aws_costs', pricing_unit='MONTH', line_item_line_item_type='Fee',
                   line_item_usage_start_date='2025-09-01 12:10:00.123456789')

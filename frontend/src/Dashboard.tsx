@@ -1,0 +1,181 @@
+import { useState } from 'react';
+import DashboardInfo from './DashboardInfo';
+import { useGold } from './api/gold';
+import DashboardCharts from './DashboardCharts';
+import DashboardUtilization from './DashboardUtilization';
+import DashboardRequest from './DashboardRequest';
+import { CalculationFactors, Evidence } from './GoldEvidence';
+import {
+  baselineMonths, carbonUnit, coverageLabels, dashboardDefaults, groupLabels, metricLabels, metricValue, monthLabel, number,
+  operatingEmissionsUnit, sumAvailable, type Breakdown, type DashboardFilters, type GoldModels, type Group, type Metric, type Scenario,
+} from './dashboardData';
+import { chfFormat } from './numberFormat';
+import './dashboard.css';
+
+type Run = GoldModels['GoldRun'];
+type Overview = GoldModels['GoldOverview'];
+type Package = GoldModels['GoldPackage'];
+
+function PeriodPicker({ months, period, onChange }: {
+  months: string[];
+  period: DashboardFilters['period'];
+  onChange: (period: DashboardFilters['period']) => void;
+}) {
+  const selected = period ?? months;
+  return <div className="dashboard-filter">
+    <span id="dashboard-period-label">Period</span>
+    <details className="dashboard-period" onBlur={event => {
+      if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false;
+    }} onKeyDown={event => {
+      if (event.key !== 'Escape' || !event.currentTarget.open) return;
+      event.currentTarget.querySelector('summary')?.focus();
+      event.currentTarget.open = false;
+    }}>
+      <summary aria-labelledby="dashboard-period-label dashboard-period-selection">
+        <span id="dashboard-period-selection">{period === null ? 'All months' :
+          selected.length === 1 ? monthLabel(selected[0]) : `${selected.length} months selected`}</span>
+      </summary>
+      <fieldset className="dashboard-period-options" aria-labelledby="dashboard-period-label">
+        <label><input type="checkbox" checked={period === null}
+          onChange={event => onChange(event.target.checked ? null : [])} />All months</label>
+        {months.map(month => <label key={month}><input type="checkbox" checked={selected.includes(month)}
+          onChange={event => {
+            const checked = event.target.checked;
+            const next = months.filter(candidate => candidate === month ? checked : selected.includes(candidate));
+            onChange(next.length === months.length ? null : next);
+          }} />{monthLabel(month)}</label>)}
+      </fieldset>
+    </details>
+  </div>;
+}
+
+function Filters({ filters, months, update }: {
+  filters: DashboardFilters;
+  months: string[];
+  update: (filters: DashboardFilters) => void;
+}) {
+  return <section className="dashboard-filters dashboard-panel" aria-label="Dashboard filters">
+    <div className="dashboard-filter">
+      <label htmlFor="dashboard-scenario">Assumptions</label>
+      <select id="dashboard-scenario" value={filters.scenario} onChange={event => update({ ...filters, scenario: event.target.value as Scenario })}>
+        <option value="low">Low</option><option value="mid">Mid</option><option value="high">High</option>
+      </select>
+    </div>
+    <div className="dashboard-filter">
+      <label htmlFor="dashboard-group">Group by</label>
+      <select id="dashboard-group" value={filters.group} onChange={event => update({ ...filters, group: event.target.value as Group, driver: '' })}>
+        {Object.entries(groupLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+      </select>
+    </div>
+    <div className="dashboard-filter">
+      <label htmlFor="dashboard-metric">Metric</label>
+      <select id="dashboard-metric" value={filters.metric} onChange={event => update({ ...filters, metric: event.target.value as Metric })}>
+        {Object.entries(metricLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+      </select>
+    </div>
+    <PeriodPicker months={months} period={filters.period} onChange={period => update({ ...filters, period })} />
+    <button className="dashboard-text-button dashboard-reset" type="button" onClick={() => update(dashboardDefaults)}>Reset filters</button>
+  </section>;
+}
+
+function Footprint({ overview, run }: { overview: Overview; run: Run }) {
+  const unit = operatingEmissionsUnit;
+  const spending = sumAvailable(overview.cost.value, overview.imputed_cost_chf);
+  const imputedSpending = overview.imputed_cost_chf == null ? null : chfFormat.format(Number(overview.imputed_cost_chf));
+  const metrics = [
+    ['carbon', 'Estimated operating emissions',
+      metricValue(sumAvailable(overview.emissions.value, overview.swiss_operating_kg_co2e), 'carbon', unit),
+      overview.carbon_coverage, null],
+    ['energy', 'Estimated electricity use', metricValue(overview.energy.value, 'energy', unit), overview.energy_coverage, null],
+    ['cost', 'Estimated spending', spending === null ? 'Unavailable' : chfFormat.format(spending),
+      overview.cost_coverage, imputedSpending && `Includes ${imputedSpending} imputed`],
+  ] as const;
+  return <dl className="dashboard-kpis">
+      {metrics.map(([metric, label, value, coverage, detail]) => <div key={metric}>
+        <dt>
+          <span>{label}</span>
+          <DashboardInfo label={label}>
+            <p>{metric === 'cost' ? 'Recorded charges plus missing usage charges estimated from comparable unit prices.'
+              : metric === 'energy' ? 'Usage × matching energy intensity × PUE for IT-side estimates.'
+                : 'Facility electricity × location-based factors. The total includes direct CO₂ from Germany and Ireland and the operating CO₂e estimate for Switzerland.'}</p>
+            <p>{metric === 'cost' ? value : `${value} · ${coverageLabels[coverage]}`}</p>
+            <Evidence run={run.run_id} id={overview.evidence_set_id} label="Sources and coverage" />
+            {metric === 'cost' ? <>
+              <p>CHF uses a factor of 1. EUR and USD use the rate for the billing month.</p>
+              <p>Recorded spending {overview.cost.value === null ? 'unavailable' : chfFormat.format(Number(overview.cost.value))}</p>
+              <details className="gold-evidence">
+                <summary>Billing coverage details</summary>
+                <p>{number.format(overview.included_rows)} recorded charges · {number.format(overview.missing_amount_rows)} missing source amounts
+                  {' · '}{number.format(overview.missing_fx_rows)} missing exchange rates · {number.format(overview.review_rows)} charges under review</p>
+                {overview.recovered_cost_chf != null && <p>Recorded spending includes {metricValue(overview.recovered_cost_chf, 'cost', unit)} recovered from exact billing mirrors.</p>}
+              </details>
+            </> : <CalculationFactors run={run.run_id} ids={metric === 'energy'
+              ? ['vcpu', 'database_vcore', 'build_runner', 'node', 'gpu', 'storage', 'tokens', 'message', 'pue']
+              : ['grid_de', 'grid_ie', 'grid_ch', 'grid_ch_operating']} />}
+            {metric === 'carbon' && overview.emissions.value !== null &&
+              <p>Case emissions subtotal {metricValue(overview.emissions.value, 'carbon', carbonUnit(overview.emissions.unit))}</p>}
+          </DashboardInfo>
+        </dt>
+        <dd>{value}</dd>
+        {metric !== 'cost' && <dd><span className={`dashboard-coverage dashboard-coverage-${coverage}`}>{coverageLabels[coverage]}</span></dd>}
+        {detail && <dd className="dashboard-kpi-detail">{detail}</dd>}
+      </div>)}
+  </dl>;
+}
+
+function FactorDetails({ run, label = 'Calculation factors' }: { run: string; label?: string }) {
+  const [open, setOpen] = useState(false);
+  return <details className="dashboard-disclosure gold-evidence" onToggle={event => setOpen(event.currentTarget.open)}>
+    <summary>{label}</summary>
+    {open && <CalculationFactors run={run} />}
+  </details>;
+}
+
+function Resources({ run, result }: { run: Run; result: Package | undefined }) {
+  const draft = result?.selection_status === 'provisional' || result?.selection_status === 'pending';
+  const path = `/api/v1/packages/${run.package_id}/exports`;
+  return <section className="dashboard-resources" aria-label="Calculations and downloads">
+    <FactorDetails run={run.run_id} />
+    <div className="dashboard-exports">
+      {result && <>
+        <a href={`${path}/baseline.csv`}>{draft ? 'Draft baseline CSV' : 'Baseline CSV'}</a>
+        <a href={`${path}/measures.csv`}>{draft ? 'Draft measures CSV' : 'Measures CSV'}</a>
+        {run.conditional_package_id &&
+          <a href={`/api/v1/packages/${run.conditional_package_id}/exports/measures.csv`}>Conditional draft measures CSV</a>}
+        <small>CSV exports use mid assumptions and the annual run rate.</small>
+      </>}
+    </div>
+  </section>;
+}
+
+function PublishedDashboard({ run }: { run: Run }) {
+  const [filters, setFilters] = useState(dashboardDefaults);
+  const { scenario, group } = filters;
+  const months = baselineMonths(run.period_start, run.period_end);
+  const prefix = `/runs/${run.run_id}`;
+  const overview = useGold<Overview>(`${prefix}/overview?scenario=${scenario}`);
+  const breakdown = useGold<Breakdown[]>(`${prefix}/breakdowns?group=${group}&scenario=${scenario}`);
+  const automatic = useGold<Package>(`/packages/${run.package_id}`);
+
+  return <>
+    <Filters filters={filters} months={months} update={setFilters} />
+    <section className="dashboard-panel dashboard-footprint" aria-label="Company-wide baseline footprint">
+      <DashboardRequest query={overview} label="baseline footprint">{data => <Footprint run={run} overview={data} />}</DashboardRequest>
+    </section>
+    <div className="dashboard-charts">
+      <DashboardCharts query={breakdown} months={months} filters={filters} unit={operatingEmissionsUnit}
+        onDriver={driver => setFilters(current => ({ ...current, driver }))} />
+    </div>
+    <DashboardUtilization run={run.run_id} filters={filters} unit={operatingEmissionsUnit}
+      onMetric={metric => setFilters(current => ({ ...current, metric }))} />
+    <Resources run={run} result={automatic.data} />
+  </>;
+}
+
+export default function Dashboard() {
+  const current = useGold<Run>('/runs/current');
+  return <div className="greenops-dashboard">
+    <h1 className="dashboard-visually-hidden">Dashboard</h1>
+    <DashboardRequest query={current} label="published data">{run => <PublishedDashboard key={run.run_id} run={run} />}</DashboardRequest>
+  </div>;
+}

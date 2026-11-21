@@ -8,6 +8,10 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: false, staleTime: 15_000 } },
 });
 
+if (window.location.pathname === '/') {
+  window.history.replaceState(null, '', `/dashboard${window.location.search}${window.location.hash}`);
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}><App /></QueryClientProvider>

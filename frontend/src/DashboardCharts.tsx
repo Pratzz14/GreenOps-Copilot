@@ -1,0 +1,162 @@
+import { useState } from 'react';
+import type { UseQueryResult } from '@tanstack/react-query';
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import DashboardRequest from './DashboardRequest';
+import DashboardPagination, { dashboardPageSize } from './DashboardPagination';
+import {
+  coverageLabels, groupLabels, metricLabels, metricUnit, metricValue, monthLabel,
+  number, periodBreakdown, rowCoverage, rowValue, trendPoints,
+  type Breakdown, type CarbonUnit, type DashboardFilters, type Metric,
+} from './dashboardData';
+
+function MonthlyTrend({ rows, months, filters, unit }: {
+  rows: Breakdown[];
+  months: string[];
+  filters: DashboardFilters;
+  unit: CarbonUnit;
+}) {
+  const { driver, metric } = filters;
+  const points = trendPoints(rows, months, metric, driver);
+  const plot = points.map(point => ({
+    ...point,
+    plotValue: point.value === null ? null : metric === 'carbon' ? point.value / 1000 : point.value,
+  }));
+  const hasValues = plot.some(point => point.plotValue !== null);
+  return <>
+    {hasValues ? <div className="dashboard-trend" role="img" aria-label={`Monthly ${metricLabels[metric]} for ${driver || 'the company'}`}>
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={plot} margin={{ top: 12, right: 25, bottom: 4, left: 0 }}>
+          <CartesianGrid vertical={false} stroke="#e2e9e1" />
+          <XAxis dataKey="month" minTickGap={8} tickFormatter={month => monthLabel(month, false)}
+            tickLine={false} tick={{ fontSize: 11, fill: '#435a4d' }} stroke="#bdcbbf" />
+          <YAxis domain={['auto', 'auto']} width={62} tickLine={false} stroke="#bdcbbf"
+            tick={{ fontSize: 11, fill: '#435a4d' }} tickFormatter={value => number.format(Number(value))} />
+          <Tooltip labelFormatter={month => monthLabel(String(month))}
+            formatter={value => [metricValue(Number(value) * (metric === 'carbon' ? 1000 : 1), metric, unit), metricLabels[metric]]} />
+          <Area type="linear" dataKey="plotValue" fill="#e3efe0" fillOpacity={0.7} baseValue="dataMin"
+            stroke="#315e46" strokeWidth={2.4}
+            dot={{ r: 2.6, fill: '#fff', strokeWidth: 2 }} activeDot={{ r: 4 }}
+            connectNulls={false} isAnimationActive={false} />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div> : <p className="dashboard-request">No published monthly values for this selection.</p>}
+    <details className="dashboard-disclosure">
+      <summary>View monthly data</summary>
+      <div className="table-scroll dashboard-table-scroll" tabIndex={0} aria-label="Monthly footprint data">
+        <table className="dashboard-table">
+          <thead><tr><th scope="col">Month</th><th scope="col">{metricUnit(metric, unit)}</th><th scope="col">Coverage</th></tr></thead>
+          <tbody>{points.map(point => <tr key={point.month}>
+            <th scope="row">{monthLabel(point.month)}</th>
+            <td>{metricValue(point.value, metric, unit)}</td>
+            <td>{point.value === null ? 'Unknown' : point.partial ? 'Partial' : 'Available'}</td>
+          </tr>)}</tbody>
+        </table>
+      </div>
+    </details>
+  </>;
+}
+
+function MetricCells({ row, unit }: { row: Breakdown; unit: CarbonUnit }) {
+  return (['carbon', 'energy', 'cost'] as Metric[]).map(metric => (
+    <td key={metric}>{metricValue(rowValue(row, metric), metric, unit)}
+      <small>{coverageLabels[rowCoverage(row, metric)]}</small>
+    </td>
+  ));
+}
+
+function Drivers({ rows, filters, unit, selectDriver }: {
+  rows: Breakdown[];
+  filters: DashboardFilters;
+  unit: CarbonUnit;
+  selectDriver: (driver: string) => void;
+}) {
+  const { driver, group, metric, period, scenario } = filters;
+  const filterKey = JSON.stringify([scenario, group, metric, period]);
+  const [pagination, setPagination] = useState({ filterKey, page: 0 });
+  if (pagination.filterKey !== filterKey) setPagination({ filterKey, page: 0 });
+  const sorted = periodBreakdown(rows, period)
+    .map(row => ({ row, value: rowValue(row, metric) }))
+    .sort((a, b) => (b.value ?? -Infinity) - (a.value ?? -Infinity) || a.row.driver.localeCompare(b.row.driver));
+  const page = Math.min(pagination.page, Math.max(0, Math.ceil(sorted.length / dashboardPageSize) - 1));
+  const start = page * dashboardPageSize;
+  const visible = sorted.slice(start, start + dashboardPageSize);
+  const ranked = visible.flatMap(({ row, value }) => value === null ? [] : [{ row, value }]);
+  const max = Math.max(0, ...sorted.map(entry => entry.value ?? 0));
+  const min = Math.min(0, ...sorted.map(entry => entry.value ?? 0));
+  const scale = max - min || 1;
+
+  return <>
+    {ranked.length ? (
+      <ul className="dashboard-bars" aria-label={`Ranked ${groupLabels[group].toLowerCase()} drivers`}>
+        {ranked.map(({ row, value }) => {
+          const partial = rowCoverage(row, metric) === 'partial';
+          return <li key={row.driver}>
+            <button type="button" aria-pressed={driver === row.driver} onClick={() => selectDriver(row.driver)}>
+              <span className="dashboard-bar-name">{row.driver}{partial && <span className="dashboard-coverage-dot" title="Partial coverage" />}</span>
+              <span className="dashboard-bar-track" aria-hidden="true">
+                <span style={{ left: `${(Math.min(0, value) - min) / scale * 100}%`, width: `${Math.abs(value) / scale * 100}%` }} />
+              </span>
+              <span className="dashboard-bar-value">{metricValue(value, metric, unit)}{partial && <span className="dashboard-visually-hidden">, partial coverage</span>}</span>
+            </button>
+          </li>;
+        })}
+      </ul>
+    ) : <p className="dashboard-request">{page ? 'No published driver values on this page.' :
+      'No published driver values for this selection.'}</p>}
+    <DashboardPagination page={page} total={sorted.length} label="Driver pages"
+      onPage={next => setPagination({ filterKey, page: next })} />
+    <details className="dashboard-disclosure">
+      <summary>View breakdown</summary>
+      {!sorted.length ? <p>No records for this period.</p> :
+        <div className="table-scroll dashboard-table-scroll" tabIndex={0} aria-label="Full footprint breakdown">
+          <table className="dashboard-table">
+            <thead><tr><th scope="col">{groupLabels[group]}</th><th scope="col">Operating emissions</th><th scope="col">Energy</th>
+              <th scope="col">Estimated spending</th><th scope="col">Imputed spending</th>
+              <th scope="col">Swiss operating CO₂e</th></tr></thead>
+            <tbody>{visible.map(({ row }) => <tr key={row.driver}>
+              <th scope="row"><button type="button" className="dashboard-text-button" aria-pressed={driver === row.driver}
+                onClick={() => selectDriver(row.driver)}>{row.driver}</button></th>
+              <MetricCells row={row} unit={unit} />
+              <td>{row.imputed_cost_chf == null ? '—' : metricValue(row.imputed_cost_chf, 'cost', unit)}
+                {row.recovered_cost_chf != null &&
+                  <small>Recorded includes {metricValue(row.recovered_cost_chf, 'cost', unit)} recovered</small>}
+              </td>
+              <td>{row.swiss_operating_kg_co2e == null ? '—' : metricValue(row.swiss_operating_kg_co2e, 'carbon', unit)}</td>
+            </tr>)}</tbody>
+          </table>
+        </div>}
+    </details>
+  </>;
+}
+
+export default function DashboardCharts({ query, months, filters, unit, onDriver }: {
+  query: UseQueryResult<Breakdown[], Error>;
+  months: string[];
+  filters: DashboardFilters;
+  unit: CarbonUnit;
+  onDriver: (driver: string) => void;
+}) {
+  const selected = filters.period ?? months;
+  const periodLabel = filters.period === null ? 'Baseline year' :
+    selected.length === 1 ? monthLabel(selected[0]) : `${selected.length} months selected`;
+  return <>
+    <section className="dashboard-panel dashboard-chart-panel" aria-labelledby="dashboard-trend">
+      <h2 id="dashboard-trend">Monthly footprint</h2>
+      <div className="dashboard-chart-meta">
+        <span>{metricUnit(filters.metric, unit)} · {filters.driver || 'All drivers'}</span>
+        {filters.driver && <button className="dashboard-text-button" type="button" onClick={() => onDriver('')}>Clear driver</button>}
+      </div>
+      {filters.period !== null && <p className="dashboard-selected-month">{periodLabel}</p>}
+      <DashboardRequest query={query} label="monthly data">
+        {rows => <MonthlyTrend rows={rows} months={selected} filters={filters} unit={unit} />}
+      </DashboardRequest>
+    </section>
+    <section className="dashboard-panel dashboard-chart-panel" aria-labelledby="dashboard-drivers">
+      <h2 id="dashboard-drivers">Biggest drivers</h2>
+      <p className="dashboard-chart-meta">{metricUnit(filters.metric, unit)} · {periodLabel}</p>
+      <DashboardRequest query={query} label="driver data">
+        {rows => <Drivers rows={rows} filters={filters} unit={unit} selectDriver={name => onDriver(name === filters.driver ? '' : name)} />}
+      </DashboardRequest>
+    </section>
+  </>;
+}
