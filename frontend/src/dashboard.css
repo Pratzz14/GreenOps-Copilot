@@ -115,12 +115,6 @@
   overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;
 }
-.dashboard-kpis .dashboard-kpi-detail {
-  margin-top: 4px;
-  color: var(--dashboard-secondary);
-  font-size: 12px;
-  overflow-wrap: anywhere;
-}
 .dashboard-coverage { display: inline-block; margin-top: 5px; border-radius: 5px; padding: 2px 8px; background: #eef5ed; color: #315e46; font-size: 12px; font-weight: 650; }
 .dashboard-coverage-partial, .dashboard-coverage-unknown { background: #fbefd5; color: #724810; }
 .dashboard-footprint > .dashboard-request { padding-inline: 18px; }

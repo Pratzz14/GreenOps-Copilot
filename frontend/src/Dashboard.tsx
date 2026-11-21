@@ -81,17 +81,16 @@ function Filters({ filters, months, update }: {
 function Footprint({ overview, run }: { overview: Overview; run: Run }) {
   const unit = operatingEmissionsUnit;
   const spending = sumAvailable(overview.cost.value, overview.imputed_cost_chf);
-  const imputedSpending = overview.imputed_cost_chf == null ? null : chfFormat.format(Number(overview.imputed_cost_chf));
   const metrics = [
     ['carbon', 'Estimated operating emissions',
       metricValue(sumAvailable(overview.emissions.value, overview.swiss_operating_kg_co2e), 'carbon', unit),
-      overview.carbon_coverage, null],
-    ['energy', 'Estimated electricity use', metricValue(overview.energy.value, 'energy', unit), overview.energy_coverage, null],
+      overview.carbon_coverage],
+    ['energy', 'Estimated electricity use', metricValue(overview.energy.value, 'energy', unit), overview.energy_coverage],
     ['cost', 'Estimated spending', spending === null ? 'Unavailable' : chfFormat.format(spending),
-      overview.cost_coverage, imputedSpending && `Includes ${imputedSpending} imputed`],
+      overview.cost_coverage],
   ] as const;
   return <dl className="dashboard-kpis">
-      {metrics.map(([metric, label, value, coverage, detail]) => <div key={metric}>
+      {metrics.map(([metric, label, value, coverage]) => <div key={metric}>
         <dt>
           <span>{label}</span>
           <DashboardInfo label={label}>
@@ -118,7 +117,6 @@ function Footprint({ overview, run }: { overview: Overview; run: Run }) {
         </dt>
         <dd>{value}</dd>
         {metric !== 'cost' && <dd><span className={`dashboard-coverage dashboard-coverage-${coverage}`}>{coverageLabels[coverage]}</span></dd>}
-        {detail && <dd className="dashboard-kpi-detail">{detail}</dd>}
       </div>)}
   </dl>;
 }

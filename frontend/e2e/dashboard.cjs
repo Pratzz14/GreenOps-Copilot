@@ -33,14 +33,14 @@ async function verifyDashboard(browser, viewport) {
   const currentRun = await (await page.request.get(url + '/api/v1/runs/current')).json();
   const overview = await (await page.request.get(url + `/api/v1/runs/${currentRun.run_id}/overview`)).json();
   assert.ok(Number(overview.imputed_cost_chf) > 0, 'Gold run must include imputed charges');
-  const [estimatedSpending, imputedSpending] = await page.evaluate(amounts => {
+  const estimatedSpending = await page.evaluate(amount => {
     const chf = new Intl.NumberFormat('en-CH', { style: 'currency', currency: 'CHF' });
-    return amounts.map(amount => chf.format(amount));
-  }, [Number(overview.cost.value) + Number(overview.imputed_cost_chf), Number(overview.imputed_cost_chf)]);
+    return chf.format(amount);
+  }, Number(overview.cost.value) + Number(overview.imputed_cost_chf));
   await expect(baseline).toContainText('17.18 t CO₂e', { timeout: 15000 });
   await expect(baseline).toContainText(/128[,'’]061 kWh/);
   await expect(baseline).toContainText(estimatedSpending);
-  await expect(baseline).toContainText(`Includes ${imputedSpending} imputed`);
+  await expect(baseline.getByText(/Includes CHF .* imputed/)).toHaveCount(0);
   await expect(baseline.getByText('Partial coverage', { exact: true })).toHaveCount(2);
   const emissionsCard = baseline.locator('.dashboard-kpis > div').filter({ hasText: 'Estimated operating emissions' });
   await expect(emissionsCard.locator('.dashboard-coverage')).toHaveText('Partial coverage');
