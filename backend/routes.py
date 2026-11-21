@@ -3,7 +3,7 @@
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Path, Query, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from backend.gold import not_found, read_gold
 from backend.gold_models import (
@@ -14,7 +14,7 @@ from backend.gold_models import (
 from backend.recommendations import group_recommendations, list_recommendations, platform_breakdowns
 from backend.schemas import ErrorResponse, Health
 from backend.utilization import inspect_utilization
-from src.exports import BASELINE, MEASURES, submission_package
+from src.exports import BASELINE, MEASURES, submission_csv, submission_package
 from src.recommendations import catalog
 
 router = APIRouter(prefix="/api/v1")
@@ -221,5 +221,7 @@ def submission_export(run_id: Identifier, filename: LiteralExport, request: Requ
         artifact = "conditional-measures.csv" if not baseline and selected.endswith("-conditional") else filename
         if artifact not in gold.metadata["artifacts"]:
             raise not_found()
-        return FileResponse(gold.directory / artifact, media_type="text/csv",
-                            filename=BASELINE if baseline else MEASURES)
+        content = submission_csv(gold.db, run_id, selected, filename, gold.directory,
+                                 gold.output, gold.metadata["silver_version"])
+        return Response(content, media_type="text/csv",
+                        headers={"Content-Disposition": f'attachment; filename="{BASELINE if baseline else MEASURES}"'})

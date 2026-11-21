@@ -1,6 +1,7 @@
 """Regression checks for Gold publication and decision integrity."""
 
 import csv
+import io
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal as D
 
@@ -156,6 +157,9 @@ def test_published_run_queries_exports_and_stale_pointer(build_small):
             assert submission.status_code == 200
             assert submission.content.startswith(b"\xef\xbb\xbf")
             assert official.name in submission.headers["content-disposition"]
+            if filename == "baseline.csv":
+                exported = list(csv.DictReader(io.StringIO(submission.content.decode("utf-8-sig"))))
+                assert "Reconciliation by cost stream" in exported[0]["calculation_or_assumption"]
         assert client.get("/api/v1/runs/unknown/overview").status_code == 404
         assert client.get(base + "/evidence/unknown").status_code == 404
         atomic_csv(out / "current_silver.csv", [{"version": "a" * 64}])

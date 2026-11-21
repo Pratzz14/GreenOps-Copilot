@@ -14,6 +14,7 @@ the Sunday, 22 November 2026, 08:30 platform submission.
 
 - [Baseline and assumptions CSV](submission/template_baseline_and_assumptions.csv)
 - [Measures package CSV](submission/template_measures_package.csv)
+- [Sources, formulas, ranges and decision rules](docs/ASSUMPTIONS.md)
 
 The September 2025 through August 2026 baseline and the selected
 9-measure portfolio come from the same Gold run. At steady state, the
@@ -359,8 +360,9 @@ steady-state scenario used in the exports. Switch to **First 12 months** to
 see the effect of lead times and effective dates. The submission exports use the assessed portfolio's mid steady-state estimates.
 The scorecard stays provisional while coverage and owner approvals are open.
 Run `python -m src.exports` to export the selected portfolio and baseline
-together under `outputs/submission/<run_id>/`. The app also exposes the
-individual baseline and package downloads.
+together under `outputs/submission/<run_id>/details-<revision>/`. The official
+submission downloads include the same calculation and source notes. The
+package views also expose individual Gold artifacts.
 
 Run `npm --prefix frontend run test:gold` against the combined local app.
 Set `EDA_URL` for a port other than 8001. [Demo](docs/DEMO.md#gold-layer-demo) ·

@@ -55,6 +55,7 @@ readable by ID. Unknown IDs return 404 when Gold has been published.
 | `GET /runs/{run_id}/evidence/{evidence_set_id}?limit=20&offset=0` | Paged source rows, ticket text, factor references and calculations. The maximum page size is 100. |
 | `GET /packages/{package_id}` | Six scenario/horizon scorecards and the package contribution ledger |
 | `GET /packages/{package_id}/exports/{filename}` | `baseline.csv` and `measures.csv` with official headers and project-template order. Use the conditional package ID for its separately labeled draft measures. |
+| `GET /submissions/{run_id}/{filename}` | Official selected-package files with unchanged numeric fields and expanded methodology, scenario calculations, and source references. Matches the byte output of `python -m src.exports` for that run. |
 
 The scorecard uses steady-state annual savings for submission and exposes a
 separate first-year horizon. Conditional packages and their exports use draft
