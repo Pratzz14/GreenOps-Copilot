@@ -68,6 +68,7 @@ async function verifyDashboard(browser, viewport) {
     .map(row => ({ name: row.resource, cost: Number(row.impact.cost ?? -Infinity) })).sort(sortByCost);
   const resourceNames = utilization.locator('.dashboard-utilization-row summary strong');
   await expect(resourceNames).toHaveText(rankedResources.slice(0, 5).map(row => row.name));
+  await expect(utilization.getByText(/Assess resizing or scheduled pauses|Review reducing seats at renewal/)).toHaveCount(0);
   const resourcePages = utilization.getByRole('group', { name: 'Resource pages' });
   await expect(resourcePages).toContainText(`1–5 of ${rankedResources.length}`);
   await resourcePages.getByRole('button', { name: 'Next' }).click();

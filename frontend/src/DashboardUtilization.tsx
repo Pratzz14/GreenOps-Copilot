@@ -9,7 +9,6 @@ type Finding = {
   resource: string;
   category: string;
   observation: string;
-  action: string;
   impact: Partial<Record<Metric, string>>;
   evidence: Record<string, number[]>;
 };
@@ -19,7 +18,7 @@ const utilizationPageSize = 5;
 function Results({ scan, search, metric, unit }: { scan: Scan; search: string; metric: Metric; unit: CarbonUnit }) {
   const [requestedPage, setPage] = useState(0);
   const rows = scan.items
-    .filter(row => `${row.resource} ${row.category} ${row.action}`.toLowerCase().includes(search))
+    .filter(row => `${row.resource} ${row.category}`.toLowerCase().includes(search))
     .sort((a, b) => Number(b.impact[metric] ?? -Infinity) - Number(a.impact[metric] ?? -Infinity)
       || a.resource.localeCompare(b.resource));
   const page = Math.min(requestedPage, Math.max(0, Math.ceil(rows.length / utilizationPageSize) - 1));
@@ -33,7 +32,6 @@ function Results({ scan, search, metric, unit }: { scan: Scan; search: string; m
         'No resources could be assessed with the selected filters.'}</p>}
     {rows.slice(start, start + utilizationPageSize).map(row => <details key={row.key} className="dashboard-utilization-row">
       <summary><span><strong>{row.resource}</strong><small>{row.category}</small><small>{row.observation.split('. ', 1)[0]}</small></span>
-        <span>{row.action}</span>
         <span className="utilization-impact">
           {(['cost', 'energy', 'carbon'] as const).map(impact => <span key={impact}>
             <small>{metricLabels[impact]}</small>
