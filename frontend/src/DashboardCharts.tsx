@@ -56,12 +56,36 @@ function MonthlyTrend({ rows, months, filters, unit }: {
   </>;
 }
 
+const energyPlanningNotes: Record<string, string> = {
+  'm365:storage-gb-days': 'Storage only · partial coverage',
+  'azure_costs:capacity-day': 'Planning estimate · capacity assumed',
+  'aws_costs:gb': 'Planning estimate · transmission only',
+  'hoster_invoice:gb': 'Planning estimate · transmission only',
+};
+
 function MetricCells({ row, unit }: { row: Breakdown; unit: CarbonUnit }) {
-  return (['carbon', 'energy', 'cost'] as Metric[]).map(metric => (
-    <td key={metric}>{metricValue(rowValue(row, metric), metric, unit)}
+  return (['carbon', 'energy', 'cost'] as Metric[]).map(metric => {
+    const baseline = rowValue(row, metric);
+    const planning = metric === 'energy' ? row.planning_kwh : metric === 'carbon' ? row.planning_kg_co2e : null;
+    if (baseline === null && planning != null) {
+      const notes = new Set((row.planning_energy_boundaries ?? []).map(boundary => energyPlanningNotes[boundary]));
+      const note = metric === 'energy' && notes.size === 1 ? [...notes][0] :
+        metric === 'carbon' && row.planning_kwh == null ? 'Regional planning estimate' : undefined;
+      const display = metric === 'carbon' && Math.abs(Number(planning)) < 1000
+        ? `${number.format(Number(planning))} kg CO₂e` : metricValue(planning, metric, unit);
+      return <td key={metric}>{display}<small>{note ?? 'Planning estimate'}</small></td>;
+    }
+    if (baseline === null && metric === 'energy') {
+      return <td key={metric}>{row.needs_energy_factor ? 'Service energy factor needed' : 'Usage data needed'}</td>;
+    }
+    if (baseline === null && metric === 'carbon') {
+      const hasEnergy = row.estimated_kwh !== null || row.planning_kwh != null;
+      return <td key={metric}>{hasEnergy ? 'Hosting or grid factor needed' : 'Electricity estimate needed'}</td>;
+    }
+    return <td key={metric}>{metricValue(baseline, metric, unit)}
       <small>{coverageLabels[rowCoverage(row, metric)]}</small>
-    </td>
-  ));
+    </td>;
+  });
 }
 
 function Drivers({ rows, filters, unit, selectDriver }: {
@@ -110,9 +134,8 @@ function Drivers({ rows, filters, unit, selectDriver }: {
       {!sorted.length ? <p>No records for this period.</p> :
         <div className="table-scroll dashboard-table-scroll" tabIndex={0} aria-label="Full footprint breakdown">
           <table className="dashboard-table">
-            <thead><tr><th scope="col">{groupLabels[group]}</th><th scope="col">Operating emissions</th><th scope="col">Energy</th>
-              <th scope="col">Estimated spending</th><th scope="col">Imputed spending</th>
-              <th scope="col">Swiss operating CO₂e</th></tr></thead>
+            <thead><tr><th scope="col">{groupLabels[group]}</th><th scope="col">Estimated emissions</th><th scope="col">Energy</th>
+              <th scope="col">Estimated spending</th><th scope="col">Imputed spending</th></tr></thead>
             <tbody>{visible.map(({ row }) => <tr key={row.driver}>
               <th scope="row"><button type="button" className="dashboard-text-button" aria-pressed={driver === row.driver}
                 onClick={() => selectDriver(row.driver)}>{row.driver}</button></th>
@@ -121,7 +144,6 @@ function Drivers({ rows, filters, unit, selectDriver }: {
                 {row.recovered_cost_chf != null &&
                   <small>Recorded includes {metricValue(row.recovered_cost_chf, 'cost', unit)} recovered</small>}
               </td>
-              <td>{row.swiss_operating_kg_co2e == null ? '—' : metricValue(row.swiss_operating_kg_co2e, 'carbon', unit)}</td>
             </tr>)}</tbody>
           </table>
         </div>}

@@ -3,11 +3,12 @@ import DashboardInfo from './DashboardInfo';
 import { useGold } from './api/gold';
 import DashboardCharts from './DashboardCharts';
 import DashboardUtilization from './DashboardUtilization';
+import DashboardRecommendations, { type RecommendationGroup } from './DashboardRecommendations';
 import DashboardRequest from './DashboardRequest';
 import { CalculationFactors, Evidence } from './GoldEvidence';
 import {
-  baselineMonths, carbonUnit, coverageLabels, dashboardDefaults, groupLabels, metricLabels, metricValue, monthLabel, number,
-  operatingEmissionsUnit, sumAvailable, type Breakdown, type DashboardFilters, type GoldModels, type Group, type Metric, type Scenario,
+  baselineMonths, coverageLabels, emissionsUnit, dashboardDefaults, groupLabels, metricLabels, metricValue, monthLabel, number,
+  sumAvailable, type Breakdown, type DashboardFilters, type GoldModels, type Group, type Metric, type Scenario,
 } from './dashboardData';
 import { chfFormat } from './numberFormat';
 import './dashboard.css';
@@ -79,12 +80,11 @@ function Filters({ filters, months, update }: {
 }
 
 function Footprint({ overview, run }: { overview: Overview; run: Run }) {
-  const unit = operatingEmissionsUnit;
+  const unit = emissionsUnit(overview);
+  const emissions = overview.reporting_kg_co2e ?? null;
   const spending = sumAvailable(overview.cost.value, overview.imputed_cost_chf);
   const metrics = [
-    ['carbon', 'Estimated operating emissions',
-      metricValue(sumAvailable(overview.emissions.value, overview.swiss_operating_kg_co2e), 'carbon', unit),
-      overview.carbon_coverage],
+    ['carbon', 'Estimated emissions', metricValue(emissions, 'carbon', unit), overview.reporting_carbon_coverage],
     ['energy', 'Estimated electricity use', metricValue(overview.energy.value, 'energy', unit), overview.energy_coverage],
     ['cost', 'Estimated spending', spending === null ? 'Unavailable' : chfFormat.format(spending),
       overview.cost_coverage],
@@ -96,7 +96,8 @@ function Footprint({ overview, run }: { overview: Overview; run: Run }) {
           <DashboardInfo label={label}>
             <p>{metric === 'cost' ? 'Recorded charges plus missing usage charges estimated from comparable unit prices.'
               : metric === 'energy' ? 'Usage × matching energy intensity × PUE for IT-side estimates.'
-                : 'Facility electricity × location-based factors. The total includes direct CO₂ from Germany and Ireland and the operating CO₂e estimate for Switzerland.'}</p>
+                : 'Facility electricity × location-based grid factors.'}</p>
+            {metric === 'carbon' && <p>The submission estimates location-based operating emissions, including the Swiss CO₂e proxy.</p>}
             <p>{metric === 'cost' ? value : `${value} · ${coverageLabels[coverage]}`}</p>
             <Evidence run={run.run_id} id={overview.evidence_set_id} label="Sources and coverage" />
             {metric === 'cost' ? <>
@@ -110,9 +111,7 @@ function Footprint({ overview, run }: { overview: Overview; run: Run }) {
               </details>
             </> : <CalculationFactors run={run.run_id} ids={metric === 'energy'
               ? ['vcpu', 'database_vcore', 'build_runner', 'node', 'gpu', 'storage', 'tokens', 'message', 'pue']
-              : ['grid_de', 'grid_ie', 'grid_ch', 'grid_ch_operating']} />}
-            {metric === 'carbon' && overview.emissions.value !== null &&
-              <p>Case emissions subtotal {metricValue(overview.emissions.value, 'carbon', carbonUnit(overview.emissions.unit))}</p>}
+              : ['grid_de', 'grid_ie', 'grid_ch_operating']} />}
           </DashboardInfo>
         </dt>
         <dd>{value}</dd>
@@ -131,13 +130,13 @@ function FactorDetails({ run, label = 'Calculation factors' }: { run: string; la
 
 function Resources({ run, result }: { run: Run; result: Package | undefined }) {
   const draft = result?.selection_status === 'provisional' || result?.selection_status === 'pending';
-  const path = `/api/v1/packages/${run.package_id}/exports`;
+  const path = `/api/v1/submissions/${run.run_id}`;
   return <section className="dashboard-resources" aria-label="Calculations and downloads">
     <FactorDetails run={run.run_id} />
     <div className="dashboard-exports">
       {result && <>
         <a href={`${path}/baseline.csv`}>{draft ? 'Draft baseline CSV' : 'Baseline CSV'}</a>
-        <a href={`${path}/measures.csv`}>{draft ? 'Draft measures CSV' : 'Measures CSV'}</a>
+        <a href={`${path}/measures.csv`}>{draft ? 'Provisional submission measures CSV' : 'Submission measures CSV'}</a>
         {run.conditional_package_id &&
           <a href={`/api/v1/packages/${run.conditional_package_id}/exports/measures.csv`}>Conditional draft measures CSV</a>}
         <small>CSV exports use mid assumptions and the annual run rate.</small>
@@ -148,12 +147,18 @@ function Resources({ run, result }: { run: Run; result: Package | undefined }) {
 
 function PublishedDashboard({ run }: { run: Run }) {
   const [filters, setFilters] = useState(dashboardDefaults);
+  const [selection, setSelection] = useState<{ id: string; click: number } | null>(null);
   const { scenario, group } = filters;
   const months = baselineMonths(run.period_start, run.period_end);
   const prefix = `/runs/${run.run_id}`;
   const overview = useGold<Overview>(`${prefix}/overview?scenario=${scenario}`);
   const breakdown = useGold<Breakdown[]>(`${prefix}/breakdowns?group=${group}&scenario=${scenario}`);
   const automatic = useGold<Package>(`/packages/${run.package_id}`);
+  const params = new URLSearchParams({ scenario, group, driver: filters.driver });
+  filters.period?.forEach(month => params.append('months', month.slice(0, 7)));
+  const emptyPeriod = filters.period?.length === 0;
+  const recommendations = useGold<RecommendationGroup[]>(`${prefix}/recommendation-groups?${params}`, !emptyPeriod);
+  const recommendationLinks = new Map(recommendations.data?.flatMap(row => row.members.map(member => [member.finding_key, member.id])));
 
   return <>
     <Filters filters={filters} months={months} update={setFilters} />
@@ -161,11 +166,15 @@ function PublishedDashboard({ run }: { run: Run }) {
       <DashboardRequest query={overview} label="baseline footprint">{data => <Footprint run={run} overview={data} />}</DashboardRequest>
     </section>
     <div className="dashboard-charts">
-      <DashboardCharts query={breakdown} months={months} filters={filters} unit={operatingEmissionsUnit}
+      <DashboardCharts query={breakdown} months={months} filters={filters} unit={emissionsUnit(overview.data)}
         onDriver={driver => setFilters(current => ({ ...current, driver }))} />
     </div>
-    <DashboardUtilization run={run.run_id} filters={filters} unit={operatingEmissionsUnit}
+    <DashboardUtilization run={run.run_id} filters={filters} unit={emissionsUnit(overview.data)}
+      recommendationLinks={recommendationLinks} onRecommendation={id =>
+        setSelection(previous => ({ id, click: (previous?.click ?? 0) + 1 }))}
       onMetric={metric => setFilters(current => ({ ...current, metric }))} />
+    <DashboardRecommendations query={recommendations} run={run.run_id} basis={overview.data?.emissions.unit ?? 'CO2'}
+      metric={filters.metric} group={group} emptyPeriod={emptyPeriod} selection={selection} filterKey={params.toString()} />
     <Resources run={run} result={automatic.data} />
   </>;
 }

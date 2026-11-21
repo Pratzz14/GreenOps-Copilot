@@ -7,11 +7,15 @@ from fastapi.responses import FileResponse
 
 from backend.gold import not_found, read_gold
 from backend.gold_models import (
-    EvidencePage, GoldBreakdown, GoldFactor, GoldFinding, GoldMeasure, GoldOverview,
-    GoldPackage, GoldRun, GoldSafety, GoldTableCatalog, GoldTablePage, Group, Scenario,
+    EvidencePage, GoldBreakdown, GoldCoverageRow, GoldFactor, GoldFinding, GoldMeasure, GoldOverview,
+    GoldPackage, GoldRecommendation, GoldRun, GoldSafety, GoldTableCatalog, GoldTablePage,
+    Group, RecommendationEvidence, RecommendationGroup, Scenario,
 )
+from backend.recommendations import group_recommendations, list_recommendations, platform_breakdowns
 from backend.schemas import ErrorResponse, Health
 from backend.utilization import inspect_utilization
+from src.exports import BASELINE, MEASURES, submission_package
+from src.recommendations import catalog
 
 router = APIRouter(prefix="/api/v1")
 Identifier = Annotated[str, Path(pattern=r"^[A-Za-z0-9_-]{1,100}$")]
@@ -53,6 +57,9 @@ def overview(run_id: Identifier, request: Request, scenario: Scenario = "mid"):
             "imputed_cost_chf": row.get("imputed_cost_chf"),
             "recovered_cost_chf": row.get("recovered_cost_chf"),
             "swiss_operating_kg_co2e": row.get("swiss_operating_kg_co2e"),
+            "reporting_kg_co2e": row["reporting_kg_co2e"],
+            "reporting_carbon_coverage": row.get("reporting_carbon_coverage") or (
+                "unknown" if row["reporting_kg_co2e"] is None else coverage["carbon_coverage"]),
             **coverage, "evidence_set_id": gold.run["evidence_set_id"],
             **{key: row[key] or 0 for key in ("included_rows", "missing_amount_rows", "missing_fx_rows", "review_rows")},
         }
@@ -61,7 +68,15 @@ def overview(run_id: Identifier, request: Request, scenario: Scenario = "mid"):
 @router.get("/runs/{run_id}/breakdowns", response_model=list[GoldBreakdown], responses=GOLD_ERRORS)
 def breakdowns(run_id: Identifier, request: Request, group: Group = "department", scenario: Scenario = "mid"):
     with read_gold(request, run_id) as gold:
-        return gold.analysis(2, scenario=scenario, group_by=group)
+        if group == "platform":
+            return list(platform_breakdowns(gold, gold.output, scenario))
+        return gold.breakdowns(scenario, group)
+
+
+@router.get("/runs/{run_id}/coverage", response_model=list[GoldCoverageRow], responses=GOLD_ERRORS)
+def coverage(run_id: Identifier, request: Request, scenario: Scenario = "mid"):
+    with read_gold(request, run_id) as gold:
+        return gold.coverage(scenario)
 
 
 @router.get("/runs/{run_id}/utilization", responses=GOLD_ERRORS)
@@ -70,8 +85,32 @@ def utilization(run_id: Identifier, request: Request,
                 scenario: Scenario = "mid", group: Group = "tool", driver: str = "",
                 include_estimates: bool = False):
     with read_gold(request, run_id) as gold:
-        return inspect_utilization(gold, request.app.state.outputs, months, scenario, group, driver,
+        return inspect_utilization(gold, gold.output, months, scenario, group, driver,
                                    include_estimates=include_estimates)
+
+
+@router.get("/runs/{run_id}/recommendations", response_model=list[GoldRecommendation], responses=GOLD_ERRORS)
+def recommendations(run_id: Identifier, request: Request, months: Annotated[list[str] | None, Query()] = None,
+                    scenario: Scenario = "mid", group: Group = "tool", driver: str = ""):
+    with read_gold(request, run_id) as gold:
+        return list(list_recommendations(gold, gold.output, months, scenario, group, driver))
+
+
+@router.get("/runs/{run_id}/recommendation-groups", response_model=list[RecommendationGroup], responses=GOLD_ERRORS)
+def recommendation_groups(run_id: Identifier, request: Request, months: Annotated[list[str] | None, Query()] = None,
+                          scenario: Scenario = "mid", group: Group = "tool", driver: str = ""):
+    with read_gold(request, run_id) as gold:
+        return list(group_recommendations(gold, gold.output, months, scenario, group, driver))
+
+
+@router.get("/runs/{run_id}/recommendations/{recommendation_id}/evidence",
+            response_model=list[RecommendationEvidence], responses=GOLD_ERRORS)
+def recommendation_evidence(run_id: Identifier, recommendation_id: Identifier, request: Request):
+    with read_gold(request, run_id) as gold:
+        for item in catalog(gold, gold.output):
+            if item["id"] == recommendation_id:
+                return item["evidence"]
+    raise not_found()
 
 
 @router.get("/runs/{run_id}/tables", response_model=GoldTableCatalog, responses=GOLD_ERRORS)
@@ -172,3 +211,15 @@ def export(package_id: Identifier, filename: LiteralExport, request: Request):
         artifact = gold.directory / artifact_name
         prefix = "draft-conditional-" if conditional else "draft-" if primary[0]["evaluation_status"] != "evaluated" else ""
         return FileResponse(artifact, media_type="text/csv", filename=prefix + official_name)
+
+
+@router.get("/submissions/{run_id}/{filename}", response_class=FileResponse, responses=GOLD_ERRORS)
+def submission_export(run_id: Identifier, filename: LiteralExport, request: Request):
+    with read_gold(request, run_id) as gold:
+        selected = submission_package(gold.db, run_id)
+        baseline = filename == "baseline.csv"
+        artifact = "conditional-measures.csv" if not baseline and selected.endswith("-conditional") else filename
+        if artifact not in gold.metadata["artifacts"]:
+            raise not_found()
+        return FileResponse(gold.directory / artifact, media_type="text/csv",
+                            filename=BASELINE if baseline else MEASURES)

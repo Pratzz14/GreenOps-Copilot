@@ -2,6 +2,7 @@
 
 from contextlib import contextmanager
 from datetime import timedelta
+import re
 
 import duckdb
 from fastapi import HTTPException
@@ -23,19 +24,52 @@ def not_found():
 
 
 class GoldRead:
-    def __init__(self, db, queries, metadata, run, directory):
+    def __init__(self, db, queries, metadata, run, directory, output=None):
         self.db = db
         self.queries = queries
         self.run_id = metadata["run_id"]
         self.metadata = metadata
         self.run = run
         self.directory = directory
+        self.output = output
 
     def select(self, statement, *values):
         return records(self.db.execute(statement, [self.run_id, *values]))
 
     def analysis(self, number, **variables):
-        return query(self.db, self.queries, number, run_id=self.run_id, **variables)
+        rows = query(self.db, self.queries, number, run_id=self.run_id, **variables)
+        if number in (1, 2):
+            for row in rows:
+                if "reporting_kg_co2e" in row:
+                    continue
+                values = [row.get(key) for key in ("estimated_location_kg", "swiss_operating_kg_co2e")]
+                known = [value for value in values if value is not None]
+                row["reporting_kg_co2e"] = sum(known) if known else None
+        return rows
+
+    def breakdowns(self, scenario, group):
+        rows = self.analysis(2, scenario=scenario, group_by=group)
+        columns = {name for (name,) in self.db.execute(
+            "SELECT name FROM pragma_table_info('gold.impact_monthly')"
+        ).fetchall()}
+        if not {"planning_kwh", "planning_kg_co2e"} <= columns:
+            return rows
+        dimension = {"subject": "subject_id", "provider": "provider", "department": "department",
+                     "tool": "tool", "location": "location"}[group]
+        estimates = self.select(f"""
+            SELECT report_month, {dimension} AS driver,
+                   sum(planning_kwh) AS planning_kwh,
+                   sum(planning_kg_co2e) AS planning_kg_co2e,
+                   list(DISTINCT boundary_id) FILTER (WHERE planning_kwh IS NOT NULL) AS planning_energy_boundaries,
+                   bool_or(energy_gap_reason = 'missing_energy_factor') AS needs_energy_factor
+            FROM gold.impact_monthly WHERE run_id=? AND scenario=?
+            GROUP BY GROUPING SETS ((report_month, {dimension}), ({dimension}))
+        """, scenario)
+        by_period = {(row["report_month"], row["driver"]): row for row in estimates}
+        for row in rows:
+            row.update(by_period.get((row["report_month"], row["driver"]), {}))
+            row["planning_energy_boundaries"] = row.get("planning_energy_boundaries") or []
+        return rows
 
     def tables(self):
         counts = " UNION ALL ".join(
@@ -68,6 +102,62 @@ class GoldRead:
         """, limit, offset)
         return {"run_id": self.run_id, "table": table, "row_count": count, "offset": offset,
                 "limit": limit, "columns": columns, "items": items}
+
+    def coverage(self, scenario):
+        """Explain every workload boundary: its activity, its estimate, or the reason one is absent."""
+        columns = {row["name"] for row in records(self.db.execute(
+            "SELECT name FROM pragma_table_info(?)", ["gold.impact_monthly"]))}
+        if not {"activity_quantity", "energy_gap_reason", "carbon_gap_reason"} <= columns:
+            raise not_found()  # Runs published before gap reasons were recorded.
+        reported = "reporting_kg_co2e" if "reporting_kg_co2e" in columns else "coalesce(location_kg, swiss_operating_kg_co2e)"
+        planning_kwh = "planning_kwh" if "planning_kwh" in columns else "NULL"
+        planning_carbon = "planning_kg_co2e" if "planning_kg_co2e" in columns else "NULL"
+        rows = self.select(f"""
+            SELECT boundary_id, provider, tool, location, any_value(activity_unit) AS activity_unit,
+                   sum(activity_quantity) AS activity_quantity, sum(energy_kwh) AS energy_kwh,
+                   sum(location_kg) AS location_kg, sum(swiss_operating_kg_co2e) AS swiss_operating_kg_co2e,
+                   sum(reporting_kg_co2e) AS reporting_kg_co2e, sum(planning_kwh) AS planning_kwh,
+                   sum(planning_kg_co2e) AS planning_kg_co2e, count(*) AS months,
+                   count(*) FILTER (WHERE energy_gap_reason = 'missing_activity') AS months_missing_activity,
+                   count(*) FILTER (WHERE energy_gap_reason = 'missing_energy_factor') AS months_missing_factor,
+                   count(*) FILTER (WHERE energy_gap_reason = 'partial_activity') AS months_partial_activity,
+                   min(evidence_set_id) AS evidence_set_id
+            FROM (SELECT report_month, boundary_id, provider, tool, location, any_value(activity_unit) AS activity_unit,
+                         sum(activity_quantity) AS activity_quantity, sum(energy_kwh) AS energy_kwh,
+                         sum(location_kg) AS location_kg, sum(swiss_operating_kg_co2e) AS swiss_operating_kg_co2e,
+                         sum({reported}) AS reporting_kg_co2e, sum({planning_kwh}) AS planning_kwh,
+                         sum({planning_carbon}) AS planning_kg_co2e,
+                         CASE WHEN bool_or(energy_gap_reason = 'missing_energy_factor') THEN 'missing_energy_factor'
+                              WHEN count(*) FILTER (WHERE energy_gap_reason = 'missing_activity') = count(*) THEN 'missing_activity'
+                              WHEN bool_or(energy_gap_reason IS NOT NULL) THEN 'partial_activity' END AS energy_gap_reason,
+                         min(evidence_set_id) AS evidence_set_id
+                  FROM gold.impact_monthly WHERE run_id=? AND scenario=?
+                  GROUP BY report_month, boundary_id, provider, tool, location)
+            GROUP BY boundary_id, provider, tool, location
+            ORDER BY energy_kwh DESC NULLS LAST, boundary_id, provider, tool, location
+        """, scenario)
+        sources = {}
+        for row in self.select("""
+            SELECT DISTINCT e.evidence_set_id, f.factor_id, f.factor_name, f.source_reference
+            FROM gold.evidence e JOIN gold.factor f USING (run_id, factor_id)
+            WHERE e.run_id=? ORDER BY f.factor_id
+        """):
+            sources.setdefault(row.pop("evidence_set_id"), []).append(row)
+        for row in rows:
+            missing_factor = row.pop("months_missing_factor")
+            if row["energy_kwh"] is None:
+                state = "missing_energy_factor" if missing_factor else "missing_activity"
+            elif row["reporting_kg_co2e"] is None and row["planning_kg_co2e"] is None:
+                state = "missing_grid_factor"
+            elif row["months_missing_activity"] or row["months_partial_activity"]:
+                state = "partial_activity"
+            else:
+                state = "estimated"
+            row["state"] = state
+            row["emissions_basis"] = (self.run["emissions_basis"] if row["location_kg"] is not None else
+                                      "CO2e" if row["swiss_operating_kg_co2e"] is not None else None)
+            row["factor_sources"] = sources.get(row["evidence_set_id"], [])
+        return rows
 
     def identity(self, scenario="mid"):
         conditional = f"{self.run_id}-conditional"
@@ -150,21 +240,38 @@ def read_gold(request, run_id=None):
             silver_version = pointer(out, "current")
         except (ValueError, OSError) as exc:
             raise unavailable() from exc
-    elif not VERSION_PATTERN.fullmatch(run_id) or not (gold_directory(out) / run_id).is_dir():
+    elif not VERSION_PATTERN.fullmatch(run_id):
         if not (out / "current_gold.csv").is_file():
             raise unavailable()
         raise not_found()
+    elif not (gold_directory(out) / run_id).is_dir():
+        root = request.app.state.output_root
+        releases = root / "releases"
+        candidates = [root, *(path for path in releases.iterdir()
+                              if re.fullmatch(r"[0-9a-f]{24}", path.name))] if releases.is_dir() else [root]
+        previous = next((path for path in candidates if (gold_directory(path) / run_id).is_dir()), None)
+        if previous is None:
+            if not (out / "current_gold.csv").is_file():
+                raise unavailable()
+            raise not_found()
+        out = previous
+    with open_published_gold(out, run_id) as gold:
+        if is_current and (gold.metadata["silver_version"] != silver_version or (
+                request.app.state.health.snapshot_id and gold.metadata["snapshot_id"] != request.app.state.health.snapshot_id)):
+            raise unavailable()
+        yield gold
+
+
+@contextmanager
+def open_published_gold(out, run_id):
     try:
         directory, metadata = resolve_run(out, run_id)
-        if is_current and (metadata["silver_version"] != silver_version or (
-                request.app.state.health.snapshot_id and metadata["snapshot_id"] != request.app.state.health.snapshot_id)):
-            raise unavailable()
         with duckdb.connect(str(directory / DATABASE), read_only=True, config={"threads": 1}) as db:
             result = records(db.execute("SELECT * FROM gold.analysis_run WHERE run_id=?", [run_id]))
             if len(result) != 1 or any(result[0][field] != metadata[field] for field in
                                        ("silver_version", "snapshot_id", "calculation_version")):
                 raise unavailable()
             sql = statement_sql(db, (directory / "queries.sql").read_text(encoding="utf-8"))
-            yield GoldRead(db, sql, metadata, result[0], directory)
+            yield GoldRead(db, sql, metadata, result[0], directory, out)
     except (OSError, ValueError, KeyError, duckdb.Error) as exc:
         raise unavailable() from exc

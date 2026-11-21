@@ -1,6 +1,5 @@
 """Read-only, startup-loaded Silver exploration API."""
 import csv
-from sys import intern
 from collections import Counter, defaultdict
 from decimal import Decimal
 from pathlib import Path
@@ -12,10 +11,10 @@ from pydantic import BaseModel
 from src.silver_rules import FREE_TEXT
 from src.normalize import AUDIT_FIELDS
 from src.profile import END, START, read_csv
-from src.reconciliation import FILES
 from src.silver_profiles import field_type
-from src.silver_storage import SOURCE_TABLES, TABLES, pointer, silver_directory, validate
-from src.source_specs import SPECS
+from src.silver_storage import FINANCIAL, REPORTS, SOURCE_TABLES, TABLES, pointer, published_tables, silver_directory, validate
+from src.source_specs import EXTRA_FILES, SPECS
+from src.supplemental import source_filename
 
 Scope = Literal['full', 'baseline']
 Status = Literal['accepted', 'review', 'duplicate', 'quarantined', 'all']
@@ -30,6 +29,7 @@ PURPOSES = {
     'contracts': 'Monthly contract versions including Draft and Final',
     'ownership': 'Documented resource and cost-center associations',
     'resource_relationships': 'Billing-to-asset evidence and unresolved pools',
+    'supplemental_comparisons': 'Monthly comparisons of supplemental activity and core records',
 }
 PROFILE_COUNTS = {'valid', 'missing', 'not_applicable', 'optional_blank', 'invalid',
                   'bronze_rows', 'bronze_missing', 'matched_bronze_missing', 'silver_rows', 'count'}
@@ -121,14 +121,19 @@ class Silver:
         self.version = version
         self.rows = {}
         self.columns = {}
-        for name in FILES:
+        self.tables = published_tables(directory)
+        self.source_tables = tuple(name for name in self.tables if name in SOURCE_TABLES or name in EXTRA_FILES)
+        for name in (*self.tables, *REPORTS, *FINANCIAL):
             if name == 'transformation_log':
                 continue
             columns, rows = read_csv(directory / f'{name}.csv')
             self.columns[name] = {field: field_type(name, field) for field in columns}
-            self.rows[name] = [typed(name, row) for row in rows]
+            for index, row in enumerate(rows):
+                rows[index] = typed(name, row)
+            self.rows[name] = rows
         self.profiles = defaultdict(list)
-        self.audit = defaultdict(list)
+        self.audit_offsets = {}
+        self.audit_path = directory / 'transformation_log.csv'
         self.issues = defaultdict(list)
         self.records = {}
         for item in self.rows['profiles']:
@@ -140,27 +145,27 @@ class Silver:
         catalog = []
         audit_counts = defaultdict(Counter)
         status = Counter()
-        for name in TABLES:
+        for name in self.tables:
             rows = self.rows[name]
             counts = Counter(row.get('record_status', 'accepted') for row in rows)
-            findings = issues_by_file[f'{name}.csv']
-            if name in SOURCE_TABLES:
+            findings = issues_by_file[source_filename(name)]
+            if name in self.source_tables:
                 status.update(counts)
                 for row in rows:
                     if row['record_id'] in self.records or row['snapshot_id'] != snapshot:
                         raise ValueError('Invalid Silver record identity')
                     self.records[row['record_id']] = row
-            if name not in SOURCE_TABLES:
+            if name not in self.source_tables:
                 record_ids = {row.get('record_id') for row in rows}
                 findings = Counter(item['code'] for key in record_ids if key for item in self.issues.get(key, ()))
                 if name == 'resource_relationships':
                     findings = Counter(item['code'] for item in self.rows['unresolved_issues']
                                        if item['code'] in {'unverified_asset_relationship', 'unresolved_billing_pool'})
-            catalog.append(dict(table=name, purpose=PURPOSES.get(name) or SPECS[f'{name}.csv'].role,
+            catalog.append(dict(table=name, purpose=PURPOSES.get(name) or SPECS[source_filename(name)].role,
                                         total=len(rows), accepted=counts['accepted'], issue_count=sum(findings.values()),
                                         limitations=[f'{count:,} {code.replace("_", " ")}' for code, count in findings.most_common()]))
-        rules, changes = self.load_audit(directory / 'transformation_log.csv', audit_counts)
-        catalog = [CatalogEntry(**item, transformations=dict(audit_counts[f"{item['table']}.csv"]))
+        rules, changes = self.load_audit(self.audit_path, audit_counts)
+        catalog = [CatalogEntry(**item, transformations=dict(audit_counts[source_filename(item['table'])]))
                    for item in catalog]
         baseline, = self.rows['cost_baseline']
         issues = self.rows['unresolved_issues']
@@ -177,34 +182,46 @@ class Silver:
     def load_audit(self, path, audit_counts):
         rules = Counter()
         changes = 0
-        with path.open(encoding='utf-8', newline='') as handle:
-            reader = csv.reader(handle, strict=True)
+        with path.open('rb') as handle:
+            reader = csv.reader((line.decode('utf-8') for line in handle), strict=True)
             if tuple(next(reader, ())) != AUDIT_FIELDS:
                 raise ValueError('Invalid Silver audit schema')
-            for key, source, index, field, original, cleaned, rule, reason, evidence in reader:
+            while True:
+                offset = handle.tell()
+                entry = next(reader, None)
+                if entry is None:
+                    break
+                key, source, index, field, original, cleaned, rule, reason, evidence = entry
                 record = self.records.get(key)
                 if record is None or source != record['source_file'] or int(index) != record['source_row']:
                     raise ValueError('Audit entry has no matching Silver source row')
                 rules[rule] += 1
                 audit_counts[source][rule] += 1
                 changes += original != cleaned
-                self.audit[record['record_id']].append((
-                    intern(field), original or None, cleaned or None, intern(rule),
-                    intern(reason), evidence or None,
-                ))
+                self.audit_offsets.setdefault(key, offset)
         return rules, changes
 
     def record_changes(self, record):
-        return [dict(record_id=record['record_id'], source_file=record['source_file'],
-                     source_row=record['source_row'], **dict(zip(AUDIT_FIELDS[3:], entry, strict=True)))
-                for entry in self.audit.get(record['record_id'], ())]
+        offset = self.audit_offsets.get(record['record_id'])
+        if offset is None:
+            return []
+        changes = []
+        with self.audit_path.open('rb') as handle:
+            handle.seek(offset)
+            for entry in csv.reader((line.decode('utf-8') for line in handle), strict=True):
+                if entry[0] != record['record_id']:
+                    break
+                change = dict(zip(AUDIT_FIELDS, (value or None for value in entry), strict=True))
+                change['source_row'] = record['source_row']
+                changes.append(change)
+        return changes
 
 
 def load_silver(out: Path, snapshot: str | None):
     try:
         version = pointer(out, 'current')
         directory = silver_directory(out) / version
-        bronze, _ = validate(directory, version, FILES, snapshot)
+        bronze, _ = validate(directory, version, (*published_tables(directory), *REPORTS, *FINANCIAL), snapshot)
         return Silver(directory, version, bronze), None
     except (OSError, ValueError, KeyError, TypeError, ArithmeticError, csv.Error) as error:
         return None, f'{error}. Run normalization and reconciliation, then restart the API.'
@@ -232,7 +249,7 @@ def overview(request: Request):
 @router.get('/tables/{table}/profile', response_model=TableProfile)
 def table_profile(table: str, request: Request, scope: Scope = 'full', version: str | None = None):
     silver = store(request, version)
-    require_table(table, SOURCE_TABLES)
+    require_table(table, silver.source_tables)
     return TableProfile(version=silver.version, table=table, scope=scope, items=silver.profiles[table, scope])
 
 
@@ -240,7 +257,7 @@ def table_profile(table: str, request: Request, scope: Scope = 'full', version: 
 def table_rows(table: str, request: Request, scope: Scope = 'full', status: Status = 'accepted',
                offset: int = Query(0, ge=0), limit: int = Query(20, ge=1, le=100), version: str | None = None):
     silver = store(request, version)
-    require_table(table)
+    require_table(table, silver.tables)
     rows = [row for row in silver.rows[table] if
             (status == 'all' or row.get('record_status', 'accepted') == status) and
             (scope == 'full' or 'baseline_overlap' not in row or row.get('baseline_overlap') or row.get('baseline_context'))]
@@ -263,11 +280,11 @@ def unresolved(request: Request, source: str | None = None, code: str | None = N
                offset: int = Query(0, ge=0), limit: int = Query(20, ge=1, le=100), version: str | None = None):
     silver = store(request, version)
     if source:
-        require_table(source, SOURCE_TABLES)
+        require_table(source, silver.source_tables)
     if code and code not in silver.overview.issue_codes:
         raise HTTPException(422, detail='Unknown Silver issue code')
     rows = [row for row in silver.rows['unresolved_issues'] if
-            (not source or row['source_file'] == f'{source}.csv') and (not code or row['code'] == code)]
+            (not source or row['source_file'] == source_filename(source)) and (not code or row['code'] == code)]
     return Page(version=silver.version, total=len(rows), offset=offset, limit=limit, items=rows[offset:offset + limit])
 
 

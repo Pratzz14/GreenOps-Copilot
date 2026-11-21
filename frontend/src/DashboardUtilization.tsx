@@ -2,7 +2,7 @@ import { useId, useState } from 'react';
 import { useGold } from './api/gold';
 import DashboardRequest from './DashboardRequest';
 import DashboardPagination from './DashboardPagination';
-import { metricLabels, metricValue, type CarbonUnit, type DashboardFilters, type Metric } from './dashboardData';
+import { metricLabels, metricValue, number, type CarbonUnit, type DashboardFilters, type Metric } from './dashboardData';
 
 type Finding = {
   key: string;
@@ -10,15 +10,21 @@ type Finding = {
   category: string;
   observation: string;
   impact: Partial<Record<Metric, string>>;
+  impact_notes?: Partial<Record<Metric, string>>;
   evidence: Record<string, number[]>;
 };
 type Scan = { items: Finding[]; assessed: number; insufficient: number };
 const utilizationPageSize = 5;
 const impactMetrics = ['cost', 'energy', 'carbon'] as const;
 
-function ResourceRow({ row, metric, unit }: { row: Finding; metric: Metric; unit: CarbonUnit }) {
+type RecommendationLinks = { recommendationLinks: Map<string, string>; onRecommendation: (id: string) => void };
+
+function ResourceRow({ row, metric, unit, recommendationLinks, onRecommendation }: {
+  row: Finding; metric: Metric; unit: CarbonUnit;
+} & RecommendationLinks) {
   const [expanded, setExpanded] = useState(false);
   const evidenceId = useId();
+  const recommendation = recommendationLinks.get(row.key);
 
   return <>
     <tr className="dashboard-utilization-row" role="row">
@@ -34,16 +40,23 @@ function ResourceRow({ row, metric, unit }: { row: Finding; metric: Metric; unit
       <td className="dashboard-utilization-observation" role="cell">{row.observation.split('. ', 1)[0]}</td>
       {impactMetrics.map(impact => {
         const value = row.impact[impact] ?? null;
+        const note = row.impact_notes?.[impact];
+        const display = impact === 'energy' && value !== null && note
+          ? `${number.format(Number(value))} kWh` : metricValue(value, impact, unit);
         return <td key={impact} role="cell" className="dashboard-utilization-impact" data-active={impact === metric}
           data-unavailable={value === null}>
           <span className="dashboard-utilization-mobile-label" aria-hidden="true">{metricLabels[impact]}</span>
-          {metricValue(value, impact, unit)}
+          {value === null ? note ?? display : display}
+          {value !== null && note && <small>{note}</small>}
         </td>;
       })}
     </tr>
     <tr id={evidenceId} className="dashboard-utilization-evidence" role="row" hidden={!expanded}>
       <td colSpan={5} role="cell">
         <p>{row.observation}</p>
+        {recommendation && <a href="#dashboard-recommendations" onClick={() => onRecommendation(recommendation)}>
+          View recommendation
+        </a>}
         <details><summary>Source rows</summary>
           <ul>{Object.entries(row.evidence).map(([file, numbers]) =>
             <li key={file}>{file} · {numbers.join(', ')}</li>)}</ul>
@@ -53,9 +66,9 @@ function ResourceRow({ row, metric, unit }: { row: Finding; metric: Metric; unit
   </>;
 }
 
-function Results({ scan, matches, metric, unit, onMetric }: {
+function Results({ scan, matches, metric, unit, onMetric, ...links }: {
   scan: Scan; matches: Finding[]; metric: Metric; unit: CarbonUnit; onMetric: (metric: Metric) => void;
-}) {
+} & RecommendationLinks) {
   const [requestedPage, setPage] = useState(0);
   const [previousMetric, setPreviousMetric] = useState(metric);
   if (metric !== previousMetric) {
@@ -91,22 +104,23 @@ function Results({ scan, matches, metric, unit, onMetric }: {
       </thead>
       <tbody role="rowgroup">
         {rows.slice(start, start + utilizationPageSize).map(row =>
-          <ResourceRow key={row.key} row={row} metric={metric} unit={unit} />)}
+          <ResourceRow key={row.key} row={row} metric={metric} unit={unit} {...links} />)}
       </tbody>
     </table>
     <DashboardPagination page={page} total={rows.length} label="Resource pages" onPage={setPage} pageSize={utilizationPageSize} />
   </>;
 }
 
-export default function DashboardUtilization({ run, filters, unit, onMetric }: {
+export default function DashboardUtilization({ run, filters, unit, onMetric, ...links }: {
   run: string; filters: DashboardFilters; unit: CarbonUnit; onMetric: (metric: Metric) => void;
-}) {
+} & RecommendationLinks) {
   const [search, setSearch] = useState('');
   const params = new URLSearchParams({
     scenario: filters.scenario, group: filters.group, driver: filters.driver, include_estimates: 'true',
   });
   filters.period?.forEach(month => params.append('months', month.slice(0, 7)));
-  const query = useGold<Scan>(`/runs/${run}/utilization?${params}`);
+  const emptyPeriod = filters.period?.length === 0;
+  const query = useGold<Scan>(`/runs/${run}/utilization?${params}`, !emptyPeriod);
   const searchTerm = search.trim().toLowerCase();
   const scan = query.isError ? undefined : query.data;
   const matches = scan?.items.filter(row => `${row.resource} ${row.category}`.toLowerCase().includes(searchTerm)) ?? [];
@@ -121,9 +135,10 @@ export default function DashboardUtilization({ run, filters, unit, onMetric }: {
         <input type="search" value={search} onChange={event => setSearch(event.target.value)} />
       </label>
     </div>
+    {emptyPeriod ? <p>Select at least one month to view utilization.</p> :
     <DashboardRequest query={query} label="utilization analysis">{data =>
       <Results key={JSON.stringify([params.toString(), searchTerm])}
-        scan={data} matches={matches} metric={filters.metric} unit={unit} onMetric={onMetric} />}
-    </DashboardRequest>
+        scan={data} matches={matches} metric={filters.metric} unit={unit} onMetric={onMetric} {...links} />}
+    </DashboardRequest>}
   </section>;
 }

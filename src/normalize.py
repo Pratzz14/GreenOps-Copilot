@@ -1,5 +1,6 @@
 """Build audited, versioned Silver CSVs from the thirteen Bronze exports."""
 import argparse
+import csv
 import hashlib
 import json
 import re
@@ -9,13 +10,15 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
-from src.ingest import CORE_FILES, ROOT, TEMPLATES, bronze_directory
+from src.ingest import CORE_FILES, ROOT, bronze_directory, identities, inputs
 from src.profile import END, START, read_csv
 from src.silver_rules import (AGGREGATES, CONTRACTS, FREE_TEXT, USAGE,
                               classify, dates, extract_tags, metrics, project, slug)
-from src.silver_storage import (REPORTS, TABLES, atomic_csv, file_hash, manifest,
+from src.silver_storage import (EXTRA_TABLES, REPORTS, TABLES, atomic_csv, file_hash, manifest,
                                 validate, write_csv)
-from src.source_specs import SPECS
+from src.source_specs import EXTRA_FILES, EXTRA_SPECS, SPECS
+from src.supplemental import records as supplemental_records, standardize
+from src.supplemental_comparisons import COMPARISON_FIELDS, comparisons, enrich_extras
 
 AUDIT_FIELDS = ('record_id', 'source_file', 'source_row', 'field', 'original_value',
                 'cleaned_value', 'rule', 'reason', 'evidence_record_id')
@@ -24,6 +27,8 @@ META = ('record_id', 'source_file', 'source_row', 'snapshot_id', 'record_status'
         'duplicate_of', 'not_applicable_fields', 'event_date', 'reporting_month', 'baseline_overlap',
         'baseline_context')
 STATUSES = ('accepted', 'review', 'duplicate', 'quarantined')
+SUPPLEMENTAL_INDEX_FIELDS = {'event_date', 'reporting_month', 'baseline_overlap',
+                             'baseline_context', 'baseline_boundary_week', 'week_end'}
 REL_FIELDS = ('resource_id', 'server_id', 'record_id', 'mapping_record_id', 'evidence',
               'confidence', 'valid_from', 'valid_to', 'allocation_weight')
 DERIVED_SCHEMAS = {
@@ -65,10 +70,18 @@ class Record:
     def set(self, field, value, rule, reason, evidence=None):
         original = self.row.get(field)
         self.row[field] = value
-        if original != value:
-            self.audit.append(dict(**self.context(), field=field, original_value=original,
-                                   cleaned_value=value, rule=rule, reason=reason,
-                                   evidence_record_id=evidence))
+        if original == value:
+            return
+        if self.table in EXTRA_SPECS and (
+            str(original) == str(value)
+            or (field in SUPPLEMENTAL_INDEX_FIELDS and rule in {'reporting_date', 'reporting_month', 'baseline_scope'})
+            or (rule == 'record_disposition' and reason == 'Passed source disposition rules.')
+            or rule == 'measurement_applicability'
+        ):
+            return
+        self.audit.append(dict(**self.context(), field=field, original_value=original,
+                               cleaned_value=value, rule=rule, reason=reason,
+                               evidence_record_id=evidence))
 
     def disposition(self, status, reason):
         self.set('record_status', status, 'record_disposition', reason)
@@ -425,20 +438,20 @@ def financial_facts(tables):
     return facts
 
 
-def source_hashes(data):
-    data = bronze_directory(data)
-    return [{'name': name, 'sha256': file_hash(data / name)} for name in (*CORE_FILES, *TEMPLATES)]
+def source_hashes(data, extra=None):
+    return identities(inputs(data, extra))
 
 
-def build(data, out):
+def build(data, out, extra=None):
     data = bronze_directory(data)
     from src.silver_profiles import PROFILE_FIELDS, profiles
 
-    hashes = source_hashes(data)
+    hashes = source_hashes(data, extra)
     snapshot = hashlib.sha256(json.dumps(hashes, sort_keys=True).encode()).hexdigest()
     rules = hashlib.sha256(''.join(file_hash(ROOT / 'src' / f'{module}.py') for module in
                                   ('normalize', 'reconciliation', 'silver_rules', 'silver_storage',
-                                   'silver_profiles', 'source_specs', 'profile')).encode()).hexdigest()
+                                   'silver_profiles', 'source_specs', 'profile', 'supplemental',
+                                   'supplemental_comparisons')).encode()).hexdigest()
     version = hashlib.sha256(f'{snapshot}:{rules}'.encode()).hexdigest()
     tables = {}
     for name in CORE_FILES:
@@ -449,6 +462,40 @@ def build(data, out):
     resources, inventory, departments = enrich(tables)
     relationships_rows = relationships(resources, inventory, tables['azure_costs'] + tables['aws_costs'] + tables['hoster_invoice'])
     facts = financial_facts(tables)
+    comparison_rows = []
+    if extra is not None:
+        for table, filename in EXTRA_FILES.items():
+            spec = EXTRA_SPECS[table]
+            seen, keys = {}, {}
+            tables[table] = []
+            for index, raw, error in supplemental_records(extra / filename, spec):
+                record = Record(table, index, raw, snapshot)
+                record.row['source_file'] = filename
+                for entry in record.audit:
+                    entry['source_file'] = filename
+                for field, kind in spec.types.items():
+                    parse_field(record, field, kind)
+                dates(record, spec.date)
+                if not spec.date:
+                    record.row['baseline_context'] = True
+                if error or (spec.date and not record.row.get('event_date')):
+                    record.issue('invalid_source_record', spec.date, error or 'Invalid event date.', 'quarantined')
+                else:
+                    signature = tuple(raw.values())
+                    first = seen.setdefault(signature, record)
+                    key = tuple(raw[field] for field in spec.key.split())
+                    if record is not first:
+                        record.disposition('duplicate', 'Exact source repeat.')
+                        record.set('duplicate_of', first.id, 'duplicate_exclusion', 'Retain the first row.', first.id)
+                    elif table != 'ci_pipeline_runs' and all(key):
+                        previous = keys.setdefault(key, record)
+                        if record is not previous:
+                            for collision in (record, previous):
+                                collision.issue('business_key_collision', None, 'Conflicting rows at the source grain.', 'review')
+                standardize(record, START, END)
+                tables[table].append(record)
+        enrich_extras(tables, resources)
+        comparison_rows = comparisons(tables, facts)
     records = [record for group in tables.values() for record in group]
     measured = {
         'data_platform_usage': ('node_count', 'runtime_h', 'active_use_h', 'query_count'),
@@ -492,7 +539,7 @@ def build(data, out):
                    for key, record in resources.items()] + list(center_rows.values()),
         resource_relationships=relationships_rows,
     )
-    if hashes != source_hashes(data):
+    if hashes != source_hashes(data, extra):
         raise ValueError('Bronze changed during Silver generation')
     staging = out / '.silver-staging'
     staging.mkdir(parents=True, exist_ok=True)
@@ -502,16 +549,22 @@ def build(data, out):
         directory.mkdir()
         for name, group in tables.items():
             write_csv(directory / f'{name}.csv', [record.row for record in group],
-                      (*META, *(slug(col) for col in SPECS[f'{name}.csv'].types)))
+                      (*META, *(slug(col) for col in SPECS[EXTRA_FILES.get(name, f'{name}.csv')].types)))
+        if extra is not None:
+            write_csv(directory / 'supplemental_comparisons.csv', comparison_rows, COMPARISON_FIELDS)
         for name, rows in derived.items():
             write_csv(directory / f'{name}.csv', rows, DERIVED_SCHEMAS[name])
-        write_csv(directory / 'transformation_log.csv', [entry for record in records for entry in record.audit], AUDIT_FIELDS)
+        with (directory / 'transformation_log.csv').open('w', encoding='utf-8', newline='') as handle:
+            writer = csv.DictWriter(handle, AUDIT_FIELDS, lineterminator='\n')
+            writer.writeheader()
+            writer.writerows(entry for record in records for entry in record.audit)
         write_csv(directory / 'profiles.csv', report, PROFILE_FIELDS)
         write_csv(directory / 'unresolved_issues.csv', [entry for record in records for entry in record.issues] + extra_issues, ISSUE_FIELDS)
-        manifest(directory, version, snapshot, rules, (*TABLES, *REPORTS))
-        validate(directory, version, (*TABLES, *REPORTS))
+        artifacts = (*TABLES, *(EXTRA_TABLES if extra is not None else ()), *REPORTS)
+        manifest(directory, version, snapshot, rules, artifacts)
+        validate(directory, version, artifacts)
         if destination.exists():
-            validate(destination, version, (*TABLES, *REPORTS))
+            validate(destination, version, artifacts)
             if file_hash(directory / 'manifest.csv') != file_hash(destination / 'manifest.csv'):
                 raise ValueError('Silver generation is not deterministic')
         else:
@@ -524,8 +577,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--data', type=Path, default=ROOT / 'data')
     parser.add_argument('--out', type=Path, default=ROOT / 'outputs')
+    parser.add_argument('--extra', type=Path)
     args = parser.parse_args()
-    print(build(args.data, args.out))
+    print(build(args.data, args.out, args.extra))
 
 
 if __name__ == '__main__':

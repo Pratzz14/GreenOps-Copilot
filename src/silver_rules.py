@@ -4,6 +4,7 @@ import json
 import re
 from datetime import date, timedelta
 from decimal import Decimal
+from functools import lru_cache
 
 from src.profile import END, START
 
@@ -36,6 +37,7 @@ GPU_TYPES = {'ml', 'gpu'}
 NON_GPU_TYPES = {'prod', 'test', 'poc', 'dev', 'dr', 'backup', 'storage', 'archive', 'db', 'batch', 'other'}
 
 
+@lru_cache(maxsize=512)
 def slug(value):
     value = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1_\2', value)
     return re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', value).lower()
@@ -148,14 +150,14 @@ def dates(record, field):
     record.set('event_date', day.isoformat() if day else None, 'reporting_date', 'Date component in the recorded timezone or local clock.')
     record.set('reporting_month', day.strftime('%Y-%m') if day else None, 'reporting_month', 'Month of the recorded date.')
     end = day
-    if record.table == 'server_metrics_weekly':
+    if record.table in {'server_metrics_weekly', 'm365_usage'}:
         end = day + timedelta(days=6) if day else None
         record.set('week_end', end.isoformat() if end else None, 'week_end', 'Inclusive end of the full observed week.')
         if day and day.weekday() != 0:
             record.issue('invalid_week_start', 'week_start', 'Weekly observation does not start on Monday.', 'review')
     overlap = bool(day and end >= START and day <= END)
     record.set('baseline_overlap', overlap if day else None, 'baseline_scope', 'Record overlaps the inclusive baseline window.')
-    if record.table == 'server_metrics_weekly':
+    if record.table in {'server_metrics_weekly', 'm365_usage'}:
         record.set('baseline_boundary_week', bool(overlap and (day < START or end > END)),
                    'baseline_scope', 'Boundary week retains its full measurements.')
     record.set('baseline_context', not field, 'baseline_scope', 'Undated inventory and master records provide context.')

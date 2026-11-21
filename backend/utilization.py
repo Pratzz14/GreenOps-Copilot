@@ -1,12 +1,13 @@
 """Deterministic utilization checks against a published Silver snapshot."""
 
 from collections import defaultdict
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 
 from fastapi import HTTPException
 
 from src.gold_baseline import key_for, region
+from src.platforms import service_platform, subject_platform, subject_platforms
 from src.profile import read_csv
 from src.silver_storage import silver_directory
 
@@ -29,23 +30,31 @@ def inspect_utilization(gold, output, months, scenario, group, driver, *, includ
         return [row for row in records if row["record_status"] == "accepted"]
 
     dimensions = defaultdict(list)
+    columns = {name for (name,) in gold.db.execute(
+        "SELECT name FROM pragma_table_info('gold.impact_monthly')"
+    ).fetchall()} if include_estimates else set()
+    has_planning = {"planning_kwh", "planning_kg_co2e"} <= columns
+    platforms = subject_platforms(gold, output) if group == "platform" else {}
     cost = ("CASE WHEN recorded_cost_chf IS NOT NULL OR imputed_cost_chf IS NOT NULL "
             "THEN coalesce(recorded_cost_chf, 0) + coalesce(imputed_cost_chf, 0) END"
             if include_estimates else "recorded_cost_chf")
-    carbon = ("CASE WHEN location_kg IS NOT NULL OR swiss_operating_kg_co2e IS NOT NULL "
-              "THEN coalesce(location_kg, 0) + coalesce(swiss_operating_kg_co2e, 0) END"
+    carbon = ("coalesce(location_kg, swiss_operating_kg_co2e)"
               if include_estimates else "location_kg")
     # Group is a validated enum. Keep billing and impact buckets separate.
-    for table, value, kind in (
-        ("cost_monthly", cost, "cost"),
-        ("impact_monthly", "energy_kwh", "energy"),
-        ("impact_monthly", carbon, "carbon"),
+    for table, value, kind, planning in (
+        ("cost_monthly", cost, "cost", "NULL"),
+        ("impact_monthly", "energy_kwh", "energy", "planning_kwh" if has_planning else "NULL"),
+        ("impact_monthly", carbon, "carbon", "planning_kg_co2e" if has_planning else "NULL"),
     ):
         condition = "AND scenario=?" if table == "impact_monthly" else ""
         for row in gold.select(
-            f"SELECT subject_id, report_month, department, provider, tool, location, {value} AS amount "
+            f"SELECT subject_id, report_month, department, provider, tool, location, "
+            f"coalesce({value}, {planning}) AS amount, "
+            f"({value} IS NULL AND {planning} IS NOT NULL) AS planning "
             f"FROM gold.{table} WHERE run_id=? {condition}", *([scenario] if condition else []),
         ):
+            if group == "platform":
+                row["platform"] = subject_platform(row["subject_id"], platforms)
             dimensions[row["subject_id"]].append((kind, row))
 
     mappings = {row["resource_id"]: row for row in load("mapping_departments_tools")}
@@ -53,14 +62,34 @@ def inspect_utilization(gold, output, months, scenario, group, driver, *, includ
              for row in read_csv(directory / "resource_relationships.csv")[1]
              if row["confidence"] == "high"}
     findings, assessed, insufficient = [], 0, 0
+    storage_by_center = defaultdict(list)
+    storage_intensity = None
+    if has_planning and (directory / "m365_usage.csv").is_file():
+        factor_values = gold.select(f"""
+            SELECT value_{scenario} AS value FROM gold.factor
+            WHERE run_id=? AND factor_id IN ('storage', 'pue')
+        """)
+        if len(factor_values) == 2 and all(item["value"] is not None for item in factor_values):
+            storage_intensity = factor_values[0]["value"] * factor_values[1]["value"]
+            for source in load("m365_usage"):
+                if source.get("storage_gb") in (None, "") or not source.get("week_start"):
+                    continue
+                first = date.fromisoformat(source["week_start"])
+                covered_days = sum(first + timedelta(days=offset) in days for offset in range(7))
+                if covered_days:
+                    storage_by_center[source["cost_center"]].append((Decimal(source["storage_gb"]) * covered_days, source))
 
-    def record(name, kind, provider, subject_name, family, rows, observation, action, fallback, scope=None):
+    def record(name, kind, provider, subject_name, family, rows, observation, action, fallback, scope=None,
+               storage_center=None):
         nonlocal assessed, insufficient
         subject = f"{family}:{key_for(provider, subject_name, family)}"
         buckets = [pair for pair in dimensions[subject]
                    if pair[1]["report_month"].isoformat()[:7] in selected
                    and (scope is None or pair[1]["department"] == scope)]
-        if driver and not (fallback.get(group) == driver or any(row[group] == driver for _, row in buckets)):
+        if group == "platform":
+            family_label = {"Data cluster": "data_cluster", "Server": "server"}.get(kind, family)
+            fallback["platform"] = service_platform(family_label)
+        if driver and not (fallback.get(group) == driver or any(row.get(group) == driver for _, row in buckets)):
             return
         if observation is None:
             insufficient += 1
@@ -69,12 +98,24 @@ def inspect_utilization(gold, output, months, scenario, group, driver, *, includ
         if not observation:
             return
         values = defaultdict(list)
+        impact_notes = {}
         for metric, row in buckets:
-            if (not driver or row[group] == driver) and row["amount"] is not None:
+            if (not driver or row.get(group) == driver) and row["amount"] is not None:
                 values[metric].append(row["amount"])
+                if row["planning"]:
+                    impact_notes[metric] = "Includes planning estimates"
+        if storage_center is not None and has_planning:
+            storage = storage_by_center[storage_center]
+            if storage and not values["energy"]:
+                values["energy"].append(sum(amount for amount, _ in storage) * storage_intensity)
+                impact_notes["energy"] = "Storage only · partial coverage"
+                rows = [*rows, *(source for _, source in storage)]
+            if not values["carbon"]:
+                impact_notes["carbon"] = "Hosting location needed"
         findings.append(dict(
             key=f"{kind}:{provider}:{name}", resource=name, category=kind, observation=observation, action=action,
-            impact={metric: str(sum(amounts)) for metric, amounts in values.items()},
+            impact={metric: str(sum(amounts)) for metric, amounts in values.items() if amounts},
+            impact_notes=impact_notes,
             evidence={file: sorted({int(row["source_row"]) for row in rows if row["source_file"] == file})
                       for file in sorted({row["source_file"] for row in rows})},
         ))
@@ -157,5 +198,6 @@ def inspect_utilization(gold, output, months, scenario, group, driver, *, includ
         record(f"{name} · {center}" if center else name, "Licence", provider, name if unambiguous else "", family,
                [row, prior] if recurring else [row], observation,
                "Review reducing seats at renewal. Confirm minimum commitments and notice terms.",
-               dict(provider=provider, location="Mixed", department=department, tool=name), department)
+               dict(provider=provider, location="Mixed", department=department, tool=name), department,
+               storage_center=center if provider == "Microsoft" and name == "Microsoft 365" else None)
     return {"items": findings, "assessed": assessed, "insufficient": insufficient}

@@ -16,8 +16,7 @@ from src.gold_measures import CAP, CARBON_TARGET, COST_TARGET, DAY_RATE, build_m
 from src.ingest import ROOT
 from src.optimizer import build_packages
 from src.profile import read_csv
-from src.reconciliation import FILES as SILVER_FILES
-from src.silver_storage import VERSION_PATTERN, atomic_csv, file_hash, pointer, silver_directory, validate, write_csv
+from src.silver_storage import REPORTS, FINANCIAL, VERSION_PATTERN, atomic_csv, file_hash, pointer, published_tables, silver_directory, validate, write_csv
 
 SCHEMA = ROOT / "docs" / "gold_schema.sql"
 QUERIES = ROOT / "docs" / "gold_queries.sql"
@@ -140,9 +139,9 @@ def build_exports(db, path, run_id):
         if number == 14 and [row["parameter"] for row in rows] != [row["parameter"] for row in template_rows]:
             raise ValueError(f'Gold factor output does not preserve the submission template order: '
                              f'{[row["parameter"] for row in rows]}')
-        write_csv(path / filename, rows, columns)
+        write_csv(path / filename, rows, columns, encoding="utf-8-sig")
     conditional = query(db, queries, 15, **{**scope, "package_id": f"{run_id}-conditional"})
-    write_csv(path / CONDITIONAL_EXPORT, conditional, read_csv(TEMPLATES["measures.csv"])[0])
+    write_csv(path / CONDITIONAL_EXPORT, conditional, read_csv(TEMPLATES["measures.csv"])[0], encoding="utf-8-sig")
 
 
 def fingerprints(supplemental_hashes=()):
@@ -173,10 +172,19 @@ def load_supplemental(directory):
 def publish(out, decision, evidence_dir=None, *, estimate_missing=False):
     version = pointer(out, "current")
     silver = silver_directory(out) / version
-    snapshot, _ = validate(silver, version, SILVER_FILES)
-    if evidence_dir is None and out.resolve() == ROOT / "outputs":
+    tables = published_tables(silver)
+    snapshot, _ = validate(silver, version, (*tables, *REPORTS, *FINANCIAL))
+    full = 'supplemental_comparisons' in tables
+    if full and evidence_dir is not None:
+        raise ValueError("Full builds use supplemental evidence from versioned Silver.")
+    if evidence_dir is None and not full and out.resolve() == ROOT / "outputs":
         evidence_dir = ROOT / "sprintd-basel-green-ai-data" / "extra"
     supplemental, hashes = load_supplemental(evidence_dir) if evidence_dir is not None else ({}, [])
+    if full:
+        for filename, key in SUPPLEMENTAL_KEYS.items():
+            for row in read_csv(silver / filename)[1]:
+                if row['record_status'] == 'accepted' and row.get(key):
+                    supplemental.setdefault((filename, row[key]), []).append(row)
     data = GoldData("", silver, decision, supplemental)
     estimates = None
     if estimate_missing:
@@ -202,6 +210,10 @@ def publish(out, decision, evidence_dir=None, *, estimate_missing=False):
         build_licences(data)
         energy_coverage, carbon_coverage = build_impact(data)
         build_measures(data)
+        if full:
+            from src.gold_measures import build_supplemental_measures
+
+            build_supplemental_measures(data)
         build_packages(data, cost_coverage, carbon_coverage)
         run_evidence = data.evidence(
             "run", "Official annual baseline. Missing, unsupported and ambiguously attributed "
@@ -210,7 +222,7 @@ def publish(out, decision, evidence_dir=None, *, estimate_missing=False):
         )
         data.add("analysis_run", snapshot_id=snapshot, silver_version=version,
                  calculation_version=calculation, baseline_start=START, baseline_end_exclusive=STOP,
-                 decision_as_of=decision, schedule_timezone="Europe/Zurich", emissions_basis="CO2",
+                 decision_as_of=decision, schedule_timezone="Europe/Zurich", emissions_basis="CO2e",
                  cost_coverage=cost_coverage, energy_coverage=energy_coverage, carbon_coverage=carbon_coverage,
                  cost_reduction_target=COST_TARGET, carbon_reduction_target=CARBON_TARGET,
                  implementation_cap_chf=CAP, day_rate_chf=DAY_RATE, evidence_set_id=run_evidence)
@@ -251,9 +263,16 @@ def main():
     parser.add_argument("--evidence-dir", type=Path, help="Optional scheduler and backup evidence directory")
     parser.add_argument("--estimate-missing-costs", action="store_true",
                         help="Use OpenAI to estimate remaining missing charges from comparable bills")
+    parser.add_argument("--tag-recommendations", action="store_true",
+                        help="Add OpenAI review tags after publishing Gold")
     args = parser.parse_args()
     try:
-        print(publish(args.out, args.decision_as_of, args.evidence_dir, estimate_missing=args.estimate_missing_costs))
+        run_id = publish(args.out, args.decision_as_of, args.evidence_dir, estimate_missing=args.estimate_missing_costs)
+        if args.tag_recommendations:
+            from backend.recommendations import tag_run
+
+            print(f"Saved {tag_run(args.out, run_id)} recommendation tags.")
+        print(run_id)
     except EstimationError as error:
         parser.exit(1, f"{error}\n")
 

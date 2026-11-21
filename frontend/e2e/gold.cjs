@@ -26,7 +26,7 @@ const path = require('node:path');
       const baseline = gold.getByRole('region', { name: 'Gold baseline' });
       await expect(baseline.getByText(/^CHF\s+463['’]471\.49$/)).toBeVisible();
       await expect(baseline.getByText(/^128['’]061\.32 kWh$/)).toBeVisible();
-      await expect(baseline.getByText(/^13['’]218\.68 kg CO₂$/)).toBeVisible();
+      await expect(baseline.getByText(/^18['’]126\.97 kg CO₂e$/)).toBeVisible();
       await expect(baseline.getByText(/^35['’]667 recorded charges$/)).toBeVisible();
       await expect(gold.getByText(/114 missing amounts/)).toBeVisible();
 
@@ -99,13 +99,13 @@ const path = require('node:path');
 
       for (const [name, header] of [
         ['Draft baseline CSV', 'parameter,must_or_bonus,value_low,value_mid,value_high,unit,source,calculation_or_assumption'],
-        ['Draft measures CSV', 'measure_id,description,resource_or_source,change,effort_person_days'],
+        ['Provisional submission measures CSV', 'measure_id,description,resource_or_source,change,effort_person_days'],
       ]) {
         const href = await gold.getByRole('link', { name, exact: true }).getAttribute('href');
         const response = await page.request.get(url + href);
         assert.equal(response.status(), 200);
-        assert.ok((await response.text()).startsWith(header));
-        assert.match(response.headers()['content-disposition'], /draft-template_/);
+        assert.ok((await response.text()).replace(/^\uFEFF/, '').startsWith(header));
+        assert.match(response.headers()['content-disposition'], /template_/);
       }
 
       await gold.getByText('Factors and calculation assumptions', { exact: true }).click();

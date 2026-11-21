@@ -31,22 +31,96 @@ async function verifyDashboard(browser, viewport) {
   const trend = page.getByRole('region', { name: 'Monthly footprint' });
   const utilization = page.getByRole('region', { name: 'Utilization analysis' });
   const currentRun = await (await page.request.get(url + '/api/v1/runs/current')).json();
+  const recommendationUrl = url + `/api/v1/runs/${currentRun.run_id}/recommendations`;
+  const response = await page.request.get(recommendationUrl);
+  assert.ok(response.ok(), 'Recommendations API should return the published catalog');
+  const catalog = await response.json();
+  const developmentRecommendation = catalog.find(item => item.resource === 'dp-dev');
+  assert.equal(developmentRecommendation.safety_status, 'human_review');
+  assert.equal(catalog.find(item => item.resource === 'dr-failover').safety_status, 'blocked');
+  const projected = await (await page.request.get(recommendationUrl + '?months=2025-10&months=2026-07&group=provider&driver=Azure')).json();
+  assert.deepEqual(projected.find(item => item.id === developmentRecommendation.id).estimate, developmentRecommendation.estimate);
+  const recommendations = page.getByRole('region', { name: 'Recommendations' });
+  const groupedUrl = recommendationUrl.replace(/recommendations$/, 'recommendation-groups');
+  const july = await (await page.request.get(groupedUrl +
+    '?group=tool&driver=Microsoft%20Copilot&months=2026-06&months=2026-07')).json();
+  assert.equal(july[0].display_month, '2026-07');
+  assert.deepEqual(Object.keys(july[0].monthly_spend), ['2026-06', '2026-07']);
+  assert.equal(Number(july[0].monthly_spend['2026-07'].conditional).toFixed(2), '680.99');
+  for (const group of ['tool', 'platform', 'provider', 'location', 'department']) {
+    const grouped = await (await page.request.get(groupedUrl + '?group=' + group)).json();
+    assert.ok(grouped.length < catalog.length);
+    const ids = grouped.flatMap(row => row.members.map(member => member.id));
+    assert.deepEqual(ids.sort(), catalog.map(row => row.id).sort());
+    if (group === 'tool') {
+      const crm = grouped.find(row => row.scope === 'CRM platform');
+      assert.equal(crm.members.length, 2);
+      assert.equal(crm.persistent_unused, 10);
+      assert.equal(Number(crm.savings.steady_state.net_chf.conditional), 6600);
+      const copilot = grouped.find(row => row.scope === 'Microsoft Copilot');
+      assert.equal(copilot.display_month, '2026-08');
+      assert.equal(Number(copilot.monthly_spend['2026-08'].conditional).toFixed(2), '678.38');
+      assert.equal(Number(copilot.savings.steady_state.net_chf.conditional).toFixed(2), '7733.58');
+      assert.equal(copilot.savings.steady_state.savings_kwh.conditional, null);
+    }
+  }
+  const schedule = recommendations.locator('tr.dashboard-recommendation').filter({ hasText: 'Data platform development' });
+  await expect(schedule).toContainText('Needs review', { timeout: 15000 });
+  await expect(schedule).toContainText(/1[’']532\.33/);
+  await expect(recommendations.getByRole('columnheader', { name: /Potential monthly savings.*Aug 2026/ })).toBeVisible();
+  assert.ok(!requests.some(request => request.endsWith(`/recommendations/${developmentRecommendation.id}/evidence`)));
+  await schedule.getByRole('button').click();
+  const expansion = recommendations.locator('tr.dashboard-recommendation-expansion:visible');
+  await expansion.getByText('dp-dev', { exact: true }).click();
+  await expansion.getByText('Recurrence source rows', { exact: true }).click();
+  await expect(expansion.getByRole('listitem').filter({ hasText: /^data_platform_usage\.csv/ })).toBeVisible();
+  await schedule.getByRole('button').click();
+  const crmRow = recommendations.locator('tr.dashboard-recommendation').filter({ hasText: 'CRM platform' });
+  await recommendations.getByLabel('Spending horizon').selectOption('year');
+  await expect(crmRow).toContainText('10 unused seats');
+  await crmRow.getByRole('button').click();
+  await expect(expansion.getByText(/CRM platform.*4100/)).toBeVisible();
+  assert.ok(await expansion.getByRole('table', { name: 'Supporting scopes' }).evaluate(table => {
+    const edge = table.getBoundingClientRect().right;
+    return [...table.querySelectorAll('tbody td')].every(cell => cell.getBoundingClientRect().right <= edge + 1);
+  }), 'Supporting scopes should fit inside the evidence panel');
+  if (process.env.DASHBOARD_GROUPS_QA_DIR) {
+    await recommendations.screenshot({ path: path.join(process.env.DASHBOARD_GROUPS_QA_DIR, `groups-${viewport.width}.png`) });
+  }
+  await crmRow.getByRole('button').click();
+  await recommendations.getByLabel('Spending horizon').selectOption('month');
+  await utilization.getByRole('searchbox').fill('dp-dev');
+  await utilization.getByRole('button', { name: /dp-dev/ }).click();
+  await utilization.getByRole('link', { name: 'View recommendation' }).click();
+  await expect(expansion.locator('[data-selected="true"]')).toContainText('dp-dev');
+  await schedule.getByRole('button').click();
+  await utilization.getByRole('searchbox').fill('');
+  await page.evaluate(() => window.history.replaceState(null, '', window.location.pathname));
+  await filters.getByLabel('Group by').selectOption('platform');
+  await expect(recommendations).toContainText('Grouped by platform');
+  await expect(drivers.getByRole('list', { name: 'Ranked platform drivers' })).toBeVisible();
+  await expect(recommendations.getByRole('button', { name: /Review cluster pauses.*Data platforms/ })).toBeVisible();
+  await filters.getByLabel('Group by').selectOption('tool');
   const overview = await (await page.request.get(url + `/api/v1/runs/${currentRun.run_id}/overview`)).json();
   assert.ok(Number(overview.imputed_cost_chf) > 0, 'Gold run must include imputed charges');
   const estimatedSpending = await page.evaluate(amount => {
     const chf = new Intl.NumberFormat('en-CH', { style: 'currency', currency: 'CHF' });
     return chf.format(amount);
   }, Number(overview.cost.value) + Number(overview.imputed_cost_chf));
-  await expect(baseline).toContainText('17.18 t CO₂e', { timeout: 15000 });
+  const emissionsTotal = body => `${(Number(body.reporting_kg_co2e) / 1000).toFixed(2)} t CO₂e`;
+  assert.equal(emissionsTotal(overview), '18.13 t CO₂e');
+  await expect(baseline).toContainText(emissionsTotal(overview), { timeout: 15000 });
+  await expect(baseline.locator('.dashboard-kpis > div')).toHaveCount(3);
   await expect(baseline).toContainText(/128[,'’]061 kWh/);
   await expect(baseline).toContainText(estimatedSpending);
   await expect(baseline.getByText(/Includes CHF .* imputed/)).toHaveCount(0);
   await expect(baseline.getByText('Partial coverage', { exact: true })).toHaveCount(2);
-  const emissionsCard = baseline.locator('.dashboard-kpis > div').filter({ hasText: 'Estimated operating emissions' });
+  const emissionsCard = baseline.locator('.dashboard-kpis > div').filter({ hasText: 'Estimated emissions' });
   await expect(emissionsCard.locator('.dashboard-coverage')).toHaveText('Partial coverage');
+  await expect(page.getByRole('region', { name: 'Electricity and emissions coverage' })).toHaveCount(0);
   const spendingCard = baseline.locator('.dashboard-kpis > div').filter({ hasText: 'Estimated spending' });
   await expect(spendingCard.locator('.dashboard-coverage')).toHaveCount(0);
-  await expect(page.getByRole('region', { name: 'Recommendations' })).toHaveCount(0);
+  await expect(recommendations).toBeVisible();
   await expect(page.getByLabel('Metric', { exact: true })).toHaveValue('cost');
   await expect(trend.getByRole('img', { name: /Monthly Spending for the company/ })).toBeVisible();
   assert.ok(!requests.some(request => request.includes('/evidence/') || request.endsWith('/factors')));
@@ -81,7 +155,7 @@ async function verifyDashboard(browser, viewport) {
   await resourcePages.getByRole('button', { name: 'Previous' }).click();
   await expect(resourceNames).toHaveText(rankedResources.slice(0, 5).map(row => row.name));
   await resourcePages.getByRole('button', { name: 'Next' }).click();
-  for (const [metric, label] of [['energy', 'Energy'], ['carbon', 'CO₂e'], ['cost', 'Spending']]) {
+  for (const [metric, label] of [['energy', 'Energy'], ['carbon', 'Emissions'], ['cost', 'Spending']]) {
     const column = utilizationTable.getByRole('columnheader', { name: label, exact: true });
     const button = column.getByRole('button');
     if (metric === 'energy') await button.click();
@@ -118,7 +192,7 @@ async function verifyDashboard(browser, viewport) {
   await development.press('Enter');
   await expect(development).toHaveAttribute('aria-pressed', 'true');
   await expect(utilization.locator('.dashboard-utilization-row')).toHaveCount(1, { timeout: 15000 });
-  await expect(trend.getByRole('img', { name: /Monthly CO₂e for Data platform development/ })).toBeVisible();
+  await expect(trend.getByRole('img', { name: /Monthly Emissions for Data platform development/i })).toBeVisible();
   const allMonths = page.getByRole('checkbox', { name: 'All months', exact: true });
   const august = page.getByRole('checkbox', { name: 'Aug 2026' });
   await period.click();
@@ -128,6 +202,7 @@ async function verifyDashboard(browser, viewport) {
   await allMonths.check();
   await expect(page.locator('.dashboard-period input:checked')).toHaveCount(13);
   await allMonths.uncheck();
+  await expect(recommendations).toContainText('Select at least one month');
   await august.check();
   await page.getByRole('checkbox', { name: 'Jul 2026' }).check();
   await expect(period).toHaveText('2 months selected');
@@ -140,8 +215,8 @@ async function verifyDashboard(browser, viewport) {
   await page.getByRole('checkbox', { name: 'Jul 2026' }).uncheck();
   await august.press('Escape');
   await expect(trend).toContainText('Aug 2026');
-  await expect(development).not.toContainText('10.75 t CO₂e');
-  await expect(baseline).toContainText('17.18 t CO₂e');
+  await expect(development).not.toContainText('10.75 t CO₂');
+  await expect(baseline).toContainText(emissionsTotal(overview));
   await trend.getByRole('button', { name: 'Clear driver' }).click();
   await expect(development).toHaveAttribute('aria-pressed', 'false');
   await page.getByLabel('Group by').selectOption('department');
@@ -176,18 +251,19 @@ async function verifyDashboard(browser, viewport) {
   await page.getByLabel('Group by').selectOption('location');
   await page.getByLabel('Metric', { exact: true }).selectOption('carbon');
   await expect(drivers.getByRole('list', { name: 'Ranked location drivers' })).toBeVisible({ timeout: 15000 });
-  await expect(drivers.getByRole('button', { name: /Switzerland.*0.37 t CO₂e/ })).toBeVisible();
+  await expect(drivers.getByRole('list').getByRole('button', { name: /Switzerland/ })).toBeVisible();
   await drivers.getByText('View breakdown', { exact: true }).click();
   const swiss = drivers.getByRole('row').filter({ hasText: 'Switzerland' });
   await expect(swiss).toContainText('0.37 t CO₂e');
   await period.click();
   await allMonths.check();
   await allMonths.press('Escape');
-  await expect(swiss.getByRole('cell').first()).toContainText('3.96 t CO₂e');
+  await expect(swiss).toContainText('3.96 t CO₂e');
   await expect(drivers.getByRole('columnheader', { name: 'Imputed spending' })).toBeVisible();
   await drivers.getByText('View breakdown', { exact: true }).click();
   await page.getByLabel('Assumptions').selectOption('low');
-  await expect(baseline).toContainText('5.12 t CO₂e');
+  const low = await (await page.request.get(url + `/api/v1/runs/${currentRun.run_id}/overview?scenario=low`)).json();
+  await expect(baseline).toContainText(emissionsTotal(low));
   await expect(baseline).toContainText(estimatedSpending);
   await page.getByRole('button', { name: 'Reset filters' }).click();
   await expect(page.getByLabel('Assumptions')).toHaveValue('mid');
@@ -195,25 +271,27 @@ async function verifyDashboard(browser, viewport) {
   await page.getByLabel('Metric', { exact: true }).selectOption('carbon');
   await expect(drivers.getByRole('button', { name: /Data platform development.*10.75/ })).toBeVisible();
 
+  await page.getByLabel('Metric', { exact: true }).selectOption('energy');
   await drivers.getByText('View breakdown', { exact: true }).click();
   const production = drivers.getByRole('row').filter({ hasText: 'Data platform production' });
-  await expect(production.getByRole('cell').first()).toContainText('3.71 t CO₂e');
+  await expect(production).toContainText('3.71 t CO₂e');
   await production.getByRole('button').press('Enter');
-  await expect(trend.getByRole('img', { name: /Monthly CO₂e for Data platform production/ })).toBeVisible();
+  await page.getByLabel('Metric', { exact: true }).selectOption('carbon');
+  await expect(trend.getByRole('img', { name: /Monthly Emissions for Data platform production/i })).toBeVisible();
   await trend.getByText('View monthly data', { exact: true }).click();
   await expect(trend.getByRole('rowheader')).toHaveCount(12);
   await expect(trend.getByRole('table').getByText('Unavailable', { exact: true })).toHaveCount(0);
   await noOverflow(page);
 
-  const emissionsInfo = baseline.getByRole('button', { name: 'About Estimated operating emissions' });
-  await emissionsInfo.focus();
+  const emissionsInfo = baseline.getByRole('button', { name: 'About Estimated emissions' });
+  await emissionsInfo.click();
   const emissionsPanel = emissionsInfo.locator('..').locator('.dashboard-info-content');
   await expect.poll(async () => {
     const panel = await emissionsPanel.boundingBox();
     const filterBar = await filters.boundingBox();
     return panel && filterBar && panel.y >= filterBar.y + filterBar.height - 1;
   }).toBe(true);
-  await expect(baseline.getByText('Switzerland electricity consumption, direct CO2')).toBeVisible();
+  await expect(baseline.getByText('Swiss consumption electricity including imports, operating emissions')).toBeVisible({ timeout: 20000 });
   await baseline.getByText('Sources and coverage', { exact: true }).click();
   await expect(baseline.locator('.gold-evidence ul').first()).toBeVisible();
   await emissionsInfo.press('Escape');
@@ -235,20 +313,20 @@ async function verifyDashboard(browser, viewport) {
   await expect(utilization).toContainText('No resources match your search.');
   const files = [
     ['Draft baseline CSV', 'parameter,must_or_bonus,value_low,value_mid,value_high,unit,source,calculation_or_assumption'],
-    ['Draft measures CSV', 'measure_id,description,resource_or_source,change,effort_person_days'],
+    ['Provisional submission measures CSV', 'measure_id,description,resource_or_source,change,effort_person_days'],
     ['Conditional draft measures CSV', 'measure_id,description,resource_or_source,change,effort_person_days'],
   ];
   for (const [name, header] of files) {
     const download = page.waitForEvent('download');
     const link = page.getByRole('link', { name, exact: true });
     await link.click();
-    assert.match((await download).suggestedFilename(), /^draft-(conditional-)?template_/);
+    assert.match((await download).suggestedFilename(), /^(draft-conditional-)?template_/);
     const response = await page.request.get(url + await link.getAttribute('href'));
-    assert.ok((await response.text()).startsWith(header));
+    assert.ok((await response.text()).replace(/^\uFEFF/, '').startsWith(header));
   }
   await noOverflow(page);
   await page.reload();
-  await expect(baseline).toContainText('17.18 t CO₂e');
+  await expect(baseline).toContainText('18.13 t CO₂e');
   await page.getByRole('link', { name: 'Data Explorer' }).click();
   await expect(page.getByRole('heading', { name: 'Data journey', exact: true })).toBeVisible();
   await page.getByRole('tab', { name: 'Bronze', exact: true }).click();

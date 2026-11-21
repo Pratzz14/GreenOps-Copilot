@@ -11,6 +11,9 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from src.ingest import CORE_FILES, TEMPLATES, ROOT, bronze_directory, snapshot
+from src.ingest import identities, inputs as input_paths
+from src.source_specs import EXTRA_FILES
+from src.supplemental import local_day, records as supplemental_records
 from src.source_specs import SPECS, canonical_mapping
 
 START, END = date(2025, 9, 1), date(2026, 8, 31)
@@ -198,7 +201,7 @@ def make_view(name, records, inventory):
         observed={d for _,_,d in dated}
         coverage={'minimum':min(observed).isoformat(),'maximum':max(observed).isoformat(),'distinct_periods':len(observed),'cadence':spec.cadence}
         for _,_,d in dated: monthly[d.strftime('%Y-%m')] += 1
-        if spec.cadence in ('daily','weekly','monthly'):
+        if spec.cadence in ('daily','weekly','monthly','hourly'):  # hourly sources are checked for missing days
             entities=defaultdict(set)
             for _,r,d in dated: entities[' | '.join(r[c] for c in spec.entity.split()) or 'source'].add(d)
             for entity, periods in sorted(entities.items()):
@@ -261,31 +264,41 @@ def assess_joins(name, records, tables):
     return joins
 
 
-def profile(data):
+def profile(data, extra=None):
+    paths = input_paths(data, extra)
     data = bronze_directory(data)
-    tables={}; inputs=[]
-    for name in (*CORE_FILES,*TEMPLATES): inputs.append({'name':name,'sha256':hashlib.sha256((data/name).read_bytes()).hexdigest()})
+    tables = {}
+    inputs = identities(paths)
+    names = (*CORE_FILES, *(EXTRA_FILES.values() if extra is not None else ()))
+    parse_failures = defaultdict(list)
     snapshot_id=hashlib.sha256(json.dumps(inputs,sort_keys=True).encode()).hexdigest()
-    for name in CORE_FILES:
-        spec=SPECS[name]; _,rows=read_csv(data/name,spec.types)
+    for name in names:
+        spec=SPECS[name]
         parsed=[]
-        for n,row in enumerate(rows,2):
+        for n,row,error in supplemental_records(paths[name], spec):
+            if error:
+                parse_failures[name].append(n)
             typed={}
             for c,kind in spec.types.items():
-                try: typed[c]=parse(row[c],kind)
+                try:
+                    typed[c] = local_day(row[c]) if name in EXTRA_FILES.values() and kind == 'timestamp' else parse(row[c],kind)
                 except (ValueError,TypeError,OverflowError): typed[c]=None
             parsed.append((n,row,typed))
         tables[name]=parsed
     inventory={r['server_id']:r for _,r,_ in tables['server_inventory.csv']}
     sources=[]
-    for name in CORE_FILES:
+    for name in names:
         spec=SPECS[name]; records=tables[name]
         baseline=[rec for rec in records if spec.date and (d:=rec[2][spec.date]) is not None and d<=END and (d+timedelta(days=6) if spec.cadence=='weekly' else d)>=START] if spec.date else records
         views={}
         for scope, subset in [('full',records),('baseline',baseline)]:
             view=make_view(name,subset,inventory)
             view['scope_note']='Snapshot/master context, not historical baseline measurements.' if not spec.date else 'Weekly intervals overlapping the period; no proration.' if spec.cadence=='weekly' else 'All records in the export.' if scope=='full' else 'Records dated within the baseline; drafts and duplicate candidates retained.'
-            view['joins']=assess_joins(name,subset,tables)
+            view['joins']=assess_joins(name,subset,tables) if name in CORE_FILES else []
+            if scope == 'full' and parse_failures[name]:
+                view['issues'].append(dict(code='invalid_jsonl', severity='error', source=name, columns=[],
+                                           count=len(parse_failures[name]), rows=parse_failures[name],
+                                           message='Malformed JSONL records retained in the Bronze archive.', examples=[]))
             for join in view['joins']:
                 for code,key,message in [('unmatched_join','unmatched_rows','No matching target key.'),('missing_join_key','blank_rows','Join key is blank.'),('ambiguous_join','ambiguous_rows','Multiple target matches would multiply rows.'),('ownership_conflict','ownership_conflict_rows','Source ownership contradicts the resource master.'),('missing_department_mapping','missing_department_rows','Matching resource master has no department.')]:
                     refs=join[key]
@@ -330,10 +343,11 @@ def render_map(report):
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--data',type=Path,default=ROOT/'data');parser.add_argument('--out',type=Path,default=ROOT/'outputs');parser.add_argument('--docs',type=Path,default=ROOT/'docs')
+    parser.add_argument('--extra', type=Path)
     args=parser.parse_args()
     try:
-        report=profile(args.data)
-        manifest=snapshot(args.data,args.out)
+        report=profile(args.data,args.extra)
+        manifest=snapshot(args.data,args.out,args.extra)
         if manifest['snapshot_id']!=report['snapshot_id']: raise ValueError('Sources changed while profiling; rerun.')
         args.docs.mkdir(parents=True,exist_ok=True)
         temp=args.out/'data_quality.tmp'

@@ -131,8 +131,8 @@ def register_protections(data):
 
 
 def add_finding(data, id_, subject, category, fact, hypothesis, rows, start=START, stop=STOP,
-                confidence="observed"):
-    evidence = data.evidence(("finding", id_), fact, rows)
+                confidence="observed", factors=()):
+    evidence = data.evidence(("finding", id_), fact, rows, factors)
     data.add("finding", finding_id=id_, subject_id=subject, category=category,
              observed_start=start, observed_end_exclusive=stop, observed_fact=fact,
              waste_hypothesis=hypothesis, verification_status="observed", confidence=confidence,
@@ -140,7 +140,7 @@ def add_finding(data, id_, subject, category, fact, hypothesis, rows, start=STAR
 
 
 def add_measure(data, id_, subject, finding, action, description, change, review, notes, rows,
-                estimates=None, factors=(), effort=None, effective=None, notice=None):
+                estimates=None, factors=(), effort=None, effective=None, notice=None, cash=ZERO):
     role = data.subjects[subject]["responsible_role"]
     begin = local_at(data.decision)
     end = local_at(one_year_after(data.decision))
@@ -157,7 +157,7 @@ def add_measure(data, id_, subject, finding, action, description, change, review
                                 rows, factors, kind="assumption")
     data.add("measure", measure_id=id_, subject_id=subject, finding_id=finding, description=description,
              proposed_change=change, earliest_effective_date=effective, notice_deadline=notice,
-             effort_person_days=effort, one_time_cash_chf=ZERO if effort is not None else None,
+             effort_person_days=effort, one_time_cash_chf=cash if effort is not None else None,
              safety_status=status, responsible_role=role, risks_and_exceptions=decision_text,
              evidence_set_id=evidence)
     estimates = estimates or {}
@@ -213,9 +213,13 @@ def compute_estimates(data, usage, costs, profiles, factor, reserve_active=False
 
 def add_licence_measures(data):
     rows = defaultdict(list)
+    history = defaultdict(list)
     for row in data.source("contracts"):
         if (accepted(row) and row["source_file"] == "ai_subscriptions.csv"
-                and row["reporting_month"] == "2026-08" and row["contract_status"] == "Final"):
+                and row["reporting_month"] in {"2026-06", "2026-07", "2026-08"} and row["contract_status"] == "Final"):
+            history[row["provider"], row["product"], row["cost_center"]].append(row)
+            if row["reporting_month"] != "2026-08":
+                continue
             rows[row["provider"], row["product"]].append(row)
     for (provider, product), contracts in sorted(rows.items()):
         subject, *_ = dimensions(data, contracts[0], "ai_subscription")
@@ -242,14 +246,40 @@ def add_licence_measures(data):
         end = date.fromisoformat(end_day) if end_day else None
         notice = end - timedelta(days=int(notice_days)) if end and notice_days else None
         effective = end + timedelta(days=1) if notice and notice >= data.decision else None
-        totals = Totals(gross=monthly * 12 if monthly is not None else None, recurring=ZERO,
-                        before_energy=ZERO, after_energy=ZERO, before_co2=ZERO, after_co2=ZERO)
-        add_measure(data, f"resize-{id_}", subject, id_, "resize", f"Review unused {product} seats",
-                    "Confirm demand and reduce unused seats at the next contract-effective date.",
-                    "human_review", "Annual illustration uses August unused seats × monthly CHF price × 12. "
-                    "Verify recurring inactivity, seat minimums, renewal and notice before crediting savings. "
-                    "Workload is held fixed. Indicative effort is one person-day.",
-                    contracts, {scenario: totals for scenario in SCENARIOS}, effort=Decimal(1),
+        retained, bills = [], []
+        for row in valid:
+            cohort = history[provider, product, row["cost_center"]]
+            if (len(cohort) != 3 or len({month["reporting_month"] for month in cohort}) != 3
+                    or not all(month["licences_active_30d"] and month["licences_purchased"] for month in cohort)):
+                continue
+            peak = max(int(month["licences_active_30d"]) for month in cohort)
+            seats = int(row["licences_purchased"])
+            if seats < peak or not row["fx_rate"] or not row["price_per_seat"]:
+                continue
+            retained.append((row, seats, peak))
+            bills.extend(cohort)
+        annual_plan = (provider == "Anthropic" and retained and len(retained) == len(contracts)
+                       and all(row["billing"] == "monthly" and row["currency"] == "USD"
+                               and decimal(row["price_per_seat"]) == 25 for row, _, _ in retained))
+        annual = subtotal((seats - keep) * decimal(row["price_per_seat"]) * decimal(row["fx_rate"]) * 12
+                          for row, seats, keep in retained)
+        if annual_plan:
+            annual += sum(keep * Decimal(5) * decimal(row["fx_rate"]) * 12 for row, _, keep in retained)
+        remove = sum(seats - keep for _, seats, keep in retained)
+        totals = Totals(gross=annual, recurring=ZERO, before_energy=ZERO, after_energy=ZERO,
+                        before_co2=ZERO, after_co2=ZERO)
+        change = f"Reclaim {remove} seats at renewal after team leads confirm actual demand."
+        notes = ("Retain the highest active seat count per cost centre in the three Final months June–August. "
+                 "Value reclaimable seats at the August price and FX. Keep approved and pending requests covered. "
+                 "Confirm minimums, renewal and notice with Procurement. Workload stays unchanged. One person-day.")
+        if annual_plan:
+            change += " Move the retained Claude Team Standard seats to annual billing."
+            notes += (" Recurring savings also include USD 5 per month on retained seats at the August FX. "
+                      "Annual prepayment and Swiss quote require approval. Anthropic list prices checked 2026-11-21: "
+                      "https://claude.com/pricing")
+        add_measure(data, f"resize-{id_}", subject, id_, "resize", f"Rightsize {product} at renewal",
+                    change, "human_review", notes, [*contracts, *bills],
+                    {scenario: totals for scenario in SCENARIOS}, effort=Decimal(1),
                     effective=effective, notice=notice)
 
 
@@ -287,7 +317,8 @@ def add_saas_measures(data):
                              and (decimal(r["price_per_licence"]) or ZERO) > ZERO for r in rows)
         eligible = bool(center and effective and priced_history and annual and annual > ZERO)
         add_measure(data, f"resize-{identifier}", subject, identifier, "resize",
-                    f"Review {product} seats for {center}", "Reduce persistent unused seats at renewal.",
+                    f"Reclaim {product} seats at renewal for cost centre {center}",
+                    f"Remove {unused} persistently unused seats at renewal after the budget owner confirms demand.",
                     "eligible" if eligible else "human_review",
                     "Minimum unused seats over three months × August CHF price × 12. "
                     "The model assumes renewal at the observed unit price with no minimum above retained seats. "
@@ -355,32 +386,89 @@ def add_test_pool_measure(data, subject, tickets):
              and decimal(row["line_item_usage_amount"]) and decimal(row["line_item_usage_amount"]) > ZERO]
     variable = [row for row in bills if row["event_date"] not in protected_days
                 and not ("T-1204" in tickets and "2026-03-01" <= row["event_date"] < "2026-04-01")]
-    priced = [decimal(data.finances[row["record_id"]]["cost_chf"]) for row in variable
-              if data.finances[row["record_id"]]["financial_status"] == "included"
-              and decimal(data.finances[row["record_id"]]["cost_chf"]) > ZERO]
-    annual = subtotal(priced)
     quantity = subtotal(decimal(row["line_item_usage_amount"]) for row in bills)
-    variable_quantity = subtotal(decimal(row["line_item_usage_amount"]) for row in variable)
     estimates = {}
-    if quantity is not None and variable_quantity is not None:
-        for scenario, fraction in zip(SCENARIOS, map(Decimal, ("0.10", "0.20", "0.30")), strict=True):
+    # The ticket records the 16-vCPU pre-launch size. Test larger rollback steps first.
+    if quantity is not None and variable and "T-1058" in tickets:
+        for scenario, capacity in zip(SCENARIOS, (32, 24, 16), strict=True):
+            avoided, priced = ZERO, []
+            for row in variable:
+                units = decimal(row["line_item_usage_amount"])
+                reduction = max(ZERO, units - capacity * 24)
+                avoided += reduction
+                fact = data.finances[row["record_id"]]
+                amount = decimal(fact["cost_chf"])
+                if fact["financial_status"] == "included" and amount is not None and amount > ZERO:
+                    priced.append(amount * reduction / units)
             before, before_co2 = estimate(quantity, "vcpu", "Ireland", scenario)
-            after, after_co2 = estimate(quantity - fraction * variable_quantity, "vcpu", "Ireland", scenario)
-            estimates[scenario] = Totals(annual * fraction if annual is not None else None, ZERO,
-                                         before, after, before_co2, after_co2)
+            after, after_co2 = estimate(quantity - avoided, "vcpu", "Ireland", scenario)
+            estimates[scenario] = Totals(subtotal(priced), ZERO, before, after, before_co2, after_co2)
     source = [*references, *jobs, *backups, *bills]
     add_finding(data, "test-pool-capacity", subject, "platform_utilisation",
                 f"Billed test pool has {len(jobs)} linked scheduler runs in the baseline.",
                 "Compare billed capacity with the planned post-release scale-back and keep disaster recovery reserved.",
                 [*references, *jobs, *backups])
     add_measure(data, "resize-test-pool", subject, "test-pool-capacity", "resize",
-                "Review test pool rightsizing", "Test a staged reduction of verified spare billed pool capacity.",
-                "human_review", "Sensitivity applies 10%, 20% or 30% to variable vCPU-hours and recorded usage CHF "
-                "outside the release freeze and linked job days. This assumes proportional billing and "
-                "no change to protected capacity. Confirm go-live, billable capacity and DR membership before "
-                "execution. Three person-days and a 45-day lead time are planning assumptions.",
+                "Scale customer portal test capacity back after go-live",
+                "After portal acceptance, trial a 32-vCPU cap, then 24 vCPU subject to load tests. "
+                "Evaluate the original 16-vCPU capacity as the high-saving scenario.",
+                "human_review", "T-1058 records the temporary expansion from 16 to 64 vCPU for the customer portal. "
+                "Savings price billed vCPU-hours above 24 hours × scenario capacity at observed positive rates. "
+                "Retain full capacity on linked job days and throughout the release freeze. Confirm portal go-live, "
+                "p95 test performance and isolated disaster-recovery capacity before a change. Restore the prior "
+                "capacity on failed acceptance checks. Assumes three person-days and a 45-day lead time.",
                 source, estimates, ("vcpu", "pue", "grid_ie"), Decimal(3) if estimates else None,
                 data.decision + timedelta(days=45) if estimates else None)
+
+
+def add_development_relocation(data, subject, usage, invoices, tickets):
+    if not usage or len(tickets) < 3:
+        return
+    training = [row for row in usage if training_day(date.fromisoformat(row["event_date"]))]
+    training_units = subtotal(decimal(row["node_hours"]) for row in training)
+    all_units = subtotal(decimal(row["node_hours"]) for row in usage)
+    if training_units is None or not all_units or all_units <= training_units:
+        return
+    ordinary_bills = [row for row in invoices if row["charge_type"] == "Usage"
+                      and row["unit_of_measure"].lower() == "node-hour"
+                      and not training_day(date.fromisoformat(row["event_date"]))
+                      and data.finances[row["record_id"]]["financial_status"] == "included"
+                      and (decimal(data.finances[row["record_id"]]["cost_chf"]) or ZERO) > ZERO]
+    spend = subtotal(decimal(data.finances[row["record_id"]]["cost_chf"]) for row in ordinary_bills)
+    if spend is None:
+        return
+    schedule = compute_estimates(data, usage, invoices, (16, 12, 8), "node", reserve_active=True)
+    estimates = {}
+    for scenario, premium in zip(SCENARIOS, map(Decimal, ("0.20", "0.10", "0")), strict=True):
+        planned = schedule[scenario]
+        if planned.gross is None or planned.after_energy is None:
+            continue
+        training_kwh, training_co2 = estimate(training_units, "node", "Germany", scenario)
+        remaining_chf = max(ZERO, spend - planned.gross)
+        swiss_kwh = max(ZERO, planned.after_energy - training_kwh)
+        swiss_co2 = estimate(Decimal(1), "node", "Switzerland", scenario)[1]
+        node_kwh = estimate(Decimal(1), "node", "Switzerland", scenario)[0]
+        estimates[scenario] = Totals(planned.gross, remaining_chf * premium, planned.before_energy,
+                                     planned.after_energy, planned.before_co2,
+                                     training_co2 + swiss_kwh * swiss_co2 / node_kwh)
+    identifier = "relocate-schedule-development"
+    add_measure(data, identifier, subject, "development-idle", "schedule",
+                "Run everyday development in Zurich and preserve Frankfurt training", "Pilot Zurich for routine development with scheduled pauses. Activate Frankfurt for the first "
+                "three days of each quarter and keep the existing GPU training path and rollback available.",
+                "human_review", "T-1074 confirms relocation is technically possible and says Frankfurt was cheaper. "
+                "Model Zurich at a 20%, 10% or 0% premium on retained ordinary variable spend. This is a sensitivity "
+                "pending a like-for-like quote. Keep training in Frankfurt and apply the Zurich grid factor only to "
+                "retained non-training electricity. Retains active time plus startup allowance and the 16/12/8-hour "
+                "schedule floors. Approve only after validating data access, transfer charges, deployment latency, "
+                "quarterly training and rollback. Assumes five person-days, CHF 500 cutover cash and 60 days lead time.",
+                [*usage, *invoices, *tickets], estimates, ("node", "pue", "grid_de", "grid_ch_operating"),
+                Decimal(5), data.decision + timedelta(days=60), cash=Decimal(500))
+    evidence = data.evidence(("relocation-alternatives", identifier), "Combined relocation already includes scheduling "
+                             "savings. Preserve the linked Frankfurt training and GPU dependency.", tickets)
+    for alternative in ("schedule-development", "gpu-on-demand"):
+        data.add("measure_constraint", measure_id=identifier, related_measure_id=alternative,
+                 constraint_type="excludes", resolution_note="Choose one development change while validating training.",
+                 evidence_set_id=evidence)
 
 
 def add_ai_routing_measure(data):
@@ -414,10 +502,13 @@ def add_ai_routing_measure(data):
     if matches:
         annual, primary, alternative = min(matches, key=lambda match: (-match[0], match[1], match[2]))
         requests, _, price = rates[primary]
-        other_price = rates[alternative][2]
+        _, other_tokens, other_price = rates[alternative]
         shares = tuple(map(Decimal, ("0.10", "0.25", "0.50")))
         for scenario, share in zip(SCENARIOS, shares, strict=True):
-            estimates[scenario] = Totals(gross=requests * share * price, recurring=requests * share * other_price)
+            before, before_co2 = estimate(requests * share * tokens / 1000, "tokens", "Mixed", scenario)
+            after, after_co2 = estimate(requests * share * other_tokens / 1000, "tokens", "Mixed", scenario)
+            estimates[scenario] = Totals(requests * share * price, requests * share * other_price,
+                                         before, after, before_co2, after_co2)
         fact = (f"Across {len(rates)} comparable-size cohorts, {len(matches)} lower-price pairs match the "
                 f"task, model class and token-size filter. Best modeled annual CHF saving at a 25% routing "
                 f"share is CHF {annual * shares[1]:,.2f}.")
@@ -425,7 +516,7 @@ def add_ai_routing_measure(data):
                   "Each cohort has at least 100 recorded requests, with mean token counts within 20%. "
                   "Savings use the observed CHF/request difference and 10%, 25% or 50% routing. "
                   "Two person-days and a 30-day lead time are pilot assumptions. Validate quality, tariff "
-                  "and processing location before execution. Emissions remain unassessed.")
+                  "and processing location before execution. Emissions use the mixed-EU generation proxy.")
         sources = [*groups[primary], *groups[alternative]]
         effort = Decimal(2)
         effective = data.decision + timedelta(days=30)
@@ -441,7 +532,232 @@ def add_ai_routing_measure(data):
                 "Compare modeled savings with pilot effort before changing routing.", sources)
     add_measure(data, "route-ai-workload", subject, "ai-routing", "route", "Review AI model routing",
                 "Validate the task-equivalent candidate through a limited quality and latency pilot.",
-                "human_review", notes, sources, estimates, effort=effort, effective=effective)
+                "human_review", notes, sources, estimates, ("tokens", "grid_eu_planning"), effort=effort, effective=effective)
+
+
+def add_production_rightsizing(data, subject, usage, invoices, tickets):
+    charges = {row["event_date"]: row for row in invoices
+               if row["resource_id"] == "dp-prod" and accepted(row)
+               and row["unit_of_measure"].lower() == "node-hour" and row["charge_type"] == "Usage"}
+    scheduler = data.source("data_platform_jobs") if (data.silver / "data_platform_jobs.csv").is_file() else ()
+    jobs = {row["event_date"] for row in scheduler
+            if row["resource_id"] == "dp-prod" and row["schedule_class"] == "protection_window"}
+    matched = []
+    for row in usage:
+        day = row["event_date"]
+        invoice = charges.get(day)
+        if invoice is None or day in jobs:
+            continue
+        start = local_at(date.fromisoformat(day))
+        end = local_at(date.fromisoformat(day) + timedelta(days=1))
+        if any(rule["subject_id"] == subject and rule["rule_key"] == "finance-close"
+               and conflicts(rule, "shutdown", start, end) for rule in data.tables["protection_window"]):
+            continue
+        active, runtime, units = (decimal(row[key]) for key in ("active_use_h", "runtime_h", "node_hours"))
+        billed = decimal(invoice["quantity"])
+        fact = data.finances[invoice["record_id"]]
+        chf = decimal(fact["cost_chf"])
+        if (active is not None and runtime and active <= runtime / 2 and units and billed
+                and billed > 0 and chf and chf > 0 and fact["financial_status"] == "included"):
+            matched.append((row, invoice, units, billed, chf))
+    if not matched:
+        return
+    estimates = {}
+    total = sum(item[2] for item in matched)
+    for scenario, fraction in zip(SCENARIOS, map(Decimal, ("0.05", "0.10", "0.15")), strict=True):
+        avoided = [min(units * fraction, billed) for _, _, units, billed, _ in matched]
+        chf = sum(saved * charge / billed for saved, (_, _, _, billed, charge) in zip(avoided, matched, strict=True))
+        before, co2_before = estimate(total, "node", "Switzerland", scenario)
+        after, co2_after = estimate(total - sum(avoided), "node", "Switzerland", scenario)
+        estimates[scenario] = Totals(chf, ZERO, before, after, co2_before, co2_after)
+    add_measure(data, "resize-production-capacity", subject, None, "resize", "Pilot production capacity rightsizing",
+                "Pilot a 5%, 10% or 15% node-hour reduction on lower-activity days while retaining service.",
+                "human_review", "Uses days at or below 50% active runtime with positive matched billing. "
+                "Finance close and scheduler protection days are excluded. Validate peak capacity, fixed job "
+                "deadlines and rollback with Platform and Finance. Assumes three person-days and 45 days lead time.",
+                [*tickets, *(record for row, invoice, *_ in matched for record in (row, invoice))],
+                estimates, ("node", "pue", "grid_ch_operating"), Decimal(3), data.decision + timedelta(days=45))
+
+
+def credit_ci_savings(data, subject, rows):
+    minutes = defaultdict(lambda: ZERO)
+    for row in rows:
+        duration = decimal(row["duration_seconds"])
+        if (row["trigger"] == "schedule" and row["status"] == "ok" and row["region"] == "Ireland (Dublin)"
+                and duration is not None and duration > 0):
+            minutes[row["event_date"]] += duration / 60
+    costs = defaultdict(list)
+    for row in data.source("aws_costs"):
+        if (accepted(row) and row["resource_id"] == "cicd" and row["pricing_unit"] == "runner-minute"
+                and row["product_region"] == "Ireland (Dublin)" and row["event_date"] in minutes
+                and data.finances[row["record_id"]]["financial_status"] == "included"):
+            costs[row["event_date"]].append(row)
+    hours, chf, evidence = ZERO, ZERO, []
+    for day, bills in sorted(costs.items()):
+        units = sum(decimal(row["line_item_usage_amount"]) or ZERO for row in bills)
+        value = sum(decimal(data.finances[row["record_id"]]["cost_chf"]) or ZERO for row in bills)
+        if units > 0 and value > 0:
+            avoided = min(minutes[day], units)
+            hours += avoided / 60
+            chf += avoided / units * value
+            evidence.extend(bills)
+    if not evidence:
+        return
+    estimates = {}
+    for scenario in SCENARIOS:
+        kwh, co2 = estimate(hours, "build_runner", "Ireland", scenario)
+        estimates[scenario] = Totals(chf, ZERO, kwh, ZERO, co2, ZERO)
+    add_measure(data, "skip-no-change-nightlies", subject, None, "schedule", "Skip optional no-change nightly builds",
+                "Pilot skipping successful scheduled nightly builds with no new commits.",
+                "human_review", "Daily logged Dublin minutes are capped at billed runner-minutes and priced at "
+                "the same-day average. Confirm the billing link and exemptions for release and security checks. "
+                "Assumes one person-day and 30 days lead time.", [*rows, *evidence], estimates,
+                ("build_runner", "pue", "grid_ie"), Decimal(1), data.decision + timedelta(days=30))
+
+
+def build_supplemental_measures(data):
+    """Publish observed opportunities with explicit gates for modeled savings."""
+    def usable(table):
+        return [row for row in data.source(table) if row["record_status"] == "accepted"]
+
+    def total(rows, field):
+        return subtotal(decimal(row[field]) for row in rows) or ZERO
+
+    storage = [row for row in data.source("m365_usage")
+               if accepted(row) and decimal(row["baseline_storage_gb_days"]) is not None]
+    if storage:
+        gb_days = total(storage, "baseline_storage_gb_days")
+        observed = {row["week_start"] for row in storage}
+        expected = [START + timedelta(days=7 * week) for week in range((STOP - START).days // 7 + 1)
+                    if (START + timedelta(days=7 * week)).weekday() == 0]
+        absent = [day.isoformat() for day in expected if day.isoformat() not in observed]
+        subject = data.subject("Microsoft", "Microsoft 365", "tool", storage[0], role="Service owner")
+        sensitivity = [estimate(gb_days, "storage", "Mixed", scenario)[0] for scenario in SCENARIOS]
+        add_finding(data, "m365-electricity-coverage", subject, "energy_coverage",
+                    f"{gb_days:,.0f} GB-days across {len(observed)} of {len(expected)} baseline weeks. "
+                    "Weekly storage is held constant over covered days. "
+                    + ("Every baseline week is observed." if not absent else
+                       f"Weeks starting {', '.join(absent)} are absent and stay uncovered." if len(absent) <= 6 else
+                       f"{len(absent)} baseline weeks are absent and stay uncovered."),
+                    f"Generic storage sensitivity for these observations: {sensitivity[0]:,.1f}, "
+                    f"{sensitivity[1]:,.1f}, and {sensitivity[2]:,.1f} kWh (low, mid, high). "
+                    "This planning scenario uses a disk benchmark and facility overhead. It stays outside the baseline, "
+                    "which lists the activity with a missing energy factor. Baseline credit requires "
+                    "a matching Microsoft 365 service factor and a billing-overlap check. "
+                    "Video minutes and email counts need distinct intensity factors.", storage[:20],
+                    factors=("storage", "pue"))
+
+    reports = defaultdict(lambda: [ZERO, ZERO, ZERO, None])
+    for row in data.source("powerbi_usage"):
+        if accepted(row):
+            entry = reports[row["resource_id"], row["report"]]
+            for index, field in enumerate(("refresh_count", "refresh_duration_min", "view_count")):
+                entry[index] += decimal(row[field]) or ZERO
+            entry[3] = entry[3] or row
+    if reports:
+        fixed = any(row["comparison"] == "powerbi_capacity" and row["interpretation"].startswith("Billed capacity is a fixed")
+                    for row in data.source("supplemental_comparisons"))
+        unseen = {key: entry for key, entry in reports.items() if entry[2] == 0}
+        # Rank viewed reports by refresh minutes spent per view.
+        ranked = sorted(((entry[1] / entry[2], key, entry) for key, entry in reports.items() if entry[2] > 0),
+                        key=lambda item: (-item[0], item[1]))[:5]
+        subject = data.subject("Microsoft", "Power BI", "tool", next(iter(reports.values()))[3], role="Service owner")
+        add_finding(data, "powerbi-report-ranking", subject, "report_refresh",
+                    f"{len(reports)} reports refreshed for {sum(entry[1] for entry in reports.values()):,.0f} minutes "
+                    f"and were viewed {sum(entry[2] for entry in reports.values()):,.0f} times. "
+                    + (f"{len(unseen)} reports had no recorded view while refreshing "
+                       f"{sum(entry[1] for entry in unseen.values()):,.0f} minutes. " if unseen else
+                       "Every report was viewed at least once. ")
+                    + ("Most refresh minutes per view: "
+                       + "; ".join(f"{key[0]} {key[1]} ({entry[1]:,.0f} min, {entry[2]:,.0f} views)"
+                                   for _, key, entry in ranked) + "." if ranked else ""),
+                    ("The observed pbi-kap billing records have a fixed capacity-day quantity. " if fixed else
+                     "The link between refresh minutes and billed capacity pbi-kap is unverified. ")
+                    + "Refresh minutes support a scheduling finding. They establish no electricity use or saving "
+                    "without metering or a verified capacity configuration and power model. "
+                    "Regulatory reports and pbi-07 stay protected.",
+                    [entry[3] for entry in [*unseen.values(), *(item[2] for item in ranked)]][:20])
+
+    def flexible(row):
+        return (row.get("schedule_class") or row["time_window"].split(":")[0]) == "flexible"
+
+    candidates = (
+        ("report-refresh", "Microsoft", "Power BI", "report_refresh", "powerbi_usage",
+         lambda r: (int(decimal(r["refresh_count"]) or 0) > 0 and decimal(r["view_count"]) == 0
+                    and (r.get("report_type") or "").casefold() != "regulatory" and r["resource_id"] != "pbi-07"),
+         "Review refreshes on days with no recorded views",
+         "Verify report dependencies, business deadlines, capacity membership and attributable compute. "
+         "Fewer refreshes change no billed capacity on their own.",
+         lambda rows: f"{total(rows, 'refresh_duration_min'):,.0f} refresh minutes on those days across "
+                      f"{len({r['resource_id'] for r in rows})} reports. Regulatory reports and pbi-07 are excluded."),
+        ("ci-nightly", "AWS", "Dublin build service", "ci_schedule", "ci_pipeline_runs",
+         lambda r: r["pipeline"] == "nightly-full" and decimal(r["commits_since_last_nightly"]) == 0,
+         "Review nightly builds with no code changes",
+         "Confirm the run is optional and the change reduces billed runner activity.",
+         lambda rows: f"{total(rows, 'duration_seconds') / 60:,.0f} logged runner-minutes. "
+                      "Billed runner-minutes remain the baseline quantity."),
+        ("agent-retries", "AI gateway", "AI agents", "agent_retry", "ai_agent_runs",
+         lambda r: (decimal(r["retries"]) or 0) > 0,
+         "Review repeated AI agent attempts",
+         "Identify avoidable attempts and validate task quality and attributable token savings.",
+         lambda rows: f"{total(rows, 'retries'):,.0f} retries. These runs used "
+                      f"{total(rows, 'tokens_in') + total(rows, 'tokens_out'):,.0f} recorded tokens. "
+                      "The share attributable to retries and the overlap with gateway usage are unknown."),
+        ("flexible-jobs", "Azure", "Data platform jobs", "job_timing", "data_platform_jobs", flexible,
+         "Review flexible job schedules",
+         "Validate resource location, deadlines and protected windows. Moving a job changes when electricity is used "
+         "and leaves the amount unchanged, so a CO2 saving needs hourly regional grid data. None is claimed.",
+         lambda rows: f"{total(rows, 'duration_h'):,.0f} job hours carry a flexible window. Fixed deadlines and "
+                      "protection windows are excluded."),
+        ("log-retention", "Swiss Hoster", "Logging and monitoring", "log_retention", "log_volume",
+         lambda r: (decimal(r["retention_days"]) or 0) > 90,
+         "Review long log retention",
+         "Confirm legal, recovery and security obligations and the billed storage reduction with the owner.",
+         lambda rows: f"{sum((decimal(r['ingested_gb']) or ZERO) * (decimal(r['retention_days']) - 90) for r in rows):,.0f} "
+                      "modeled GB-days are held beyond 90 days. Billed storage GB-days remain the baseline quantity."),
+    )
+    for identifier, provider, tool, category, table, select, description, gate, quantity in candidates:
+        matches = [row for row in data.source(table) if accepted(row) and select(row)]
+        if not matches:
+            continue
+        subject = data.subject(provider, tool, "tool", matches[0], role="Service owner")
+        fact = (f"{len(matches):,} baseline records meet this review criterion. {quantity(matches)} "
+                "Evidence includes up to 20 source records.")
+        evidence = matches[:20]
+        if identifier == "ci-nightly":
+            credit_ci_savings(data, subject, matches)
+        add_finding(data, identifier, subject, category, fact, gate, evidence)
+        add_measure(data, identifier, subject, identifier, "all", description, description,
+                    "human_review", gate, evidence)
+
+    # Undated inventories: candidates exclude everything with a recorded or unknown protection.
+    inventories = (
+        ("catalogue-retention", "Azure", "Data catalogue", "data_catalog_tables", "storage_review_candidate",
+         "Review tables that are unread for over a year",
+         "Confirm with each owner that the table is unused and unbilled elsewhere before archiving. "
+         "A saving is credited only when billed storage GB-days fall.",
+         lambda rows: f"{sum(r['retention_status'] == 'protected' for r in rows)} tables are retention-protected and "
+                      f"{sum(r['storage_review_candidate'] == '' for r in rows)} have unknown retention or read dates. "
+                      "Both groups are excluded."),
+        ("backup-retention", "Backup tooling", "Backup chains", "backup_chains", "retention_review_candidate",
+         "Review retention of unprotected backup chains",
+         "Confirm restore requirements and legal retention with each owner. Chains with ten-year retention, "
+         "high criticality or personal data stay unchanged, and deleting st-backup stays blocked.",
+         lambda rows: f"{sum(r['retention_review_candidate'] != 'True' for r in rows)} chains carry a protection "
+                      "reason and are excluded."),
+    )
+    for identifier, provider, tool, table, flag, description, gate, excluded in inventories:
+        rows = usable(table)
+        matches = [row for row in rows if row.get(flag) == "True"]
+        if not matches:
+            continue
+        subject = data.subject(provider, tool, "tool", matches[0], role="Data owner")
+        fact = (f"{len(matches)} of {len(rows)} inventory records are review candidates holding "
+                f"{total(matches, 'size_gb'):,.0f} GB at the inventory date. {excluded(rows)} "
+                "Evidence includes up to 20 source records.")
+        add_finding(data, identifier, subject, "storage_retention", fact, gate, matches[:20], start=None, stop=None)
+        add_measure(data, identifier, subject, identifier, "all", description, description,
+                    "human_review", gate, matches[:20])
 
 
 def build_measures(data):
@@ -504,7 +820,9 @@ def build_measures(data):
                 "Block blanket production shutdown", "Switch off production nights and weekends.",
                 "blocked", "Weekend activity and finance closing contradict a blanket shutdown. "
                 "Platform and Finance owners can review a scoped change.", [*lookup("T-1029"), *weekend])
+    add_production_rightsizing(data, subjects["dp-prod"], prod, invoices, lookup("T-1029"))
     add_test_pool_measure(data, subjects["vm-test"], tickets)
+    add_development_relocation(data, subjects["dp-dev"], dev, dev_cost, lookup("T-1053", "T-1074", "T-1101"))
     add_measure(data, "delete-retained-backup", subjects["st-backup"], None, "delete",
                 "Block backup deletion", "Delete the retained backup archive.",
                 "blocked", "Legal retention and the rejected deletion request apply.", lookup("T-1039", "T-1195"))

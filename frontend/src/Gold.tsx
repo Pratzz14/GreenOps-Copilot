@@ -35,11 +35,12 @@ function display(value: string | number | null, formatter = number) {
 }
 
 function Baseline({ overview }: { overview: Models['GoldOverview'] }) {
-  const { cost, energy, emissions } = overview;
+  const { cost, energy } = overview;
+  const emissions = overview.reporting_kg_co2e ?? null;
   const metrics = [
     ['Recorded spending', display(cost.value, money), overview.cost_coverage],
     ['Estimated electricity', `${display(energy.value)}${energy.value === null ? '' : ' kWh'}`, overview.energy_coverage],
-    ['Estimated location-based emissions', `${display(emissions.value)}${emissions.value === null ? '' : emissions.unit === 'kg_CO2' ? ' kg CO₂' : ' kg CO₂e'}`, overview.carbon_coverage],
+    ['Estimated location-based emissions', `${display(emissions)}${emissions === null ? '' : ' kg CO₂e'}`, overview.reporting_carbon_coverage],
   ] as const;
   const scenario = overview.context.scenario;
   const scenarioLabel = scenario[0].toUpperCase() + scenario.slice(1);
@@ -79,13 +80,13 @@ function Breakdown({ run, scenario }: { run: string; scenario: Scenario }) {
       <div className="table-scroll" tabIndex={0} aria-label="Spending and footprint table">
         <table className="gold-table"><thead><tr>
           <th scope="col">{groups[group]}</th><th scope="col">Recorded CHF</th><th scope="col">Estimated kWh</th>
-          <th scope="col">Estimated kg CO₂</th><th scope="col">Imputed CHF</th>
-          <th scope="col">Swiss operating kg CO₂e</th><th scope="col">Open cost records</th><th scope="col">CO₂ coverage</th>
+          <th scope="col">Estimated kg CO₂e</th><th scope="col">Imputed CHF</th>
+          <th scope="col">Open cost records</th><th scope="col">CO₂ coverage</th>
         </tr></thead><tbody>{visible.map(row => <tr key={row.driver}>
           <th scope="row">{row.driver}</th><td>{display(row.recorded_cost_chf, money)}</td><td>{display(row.estimated_kwh)}</td>
-          <td>{display(row.estimated_location_kg)}</td><td>{display(row.imputed_cost_chf ?? null, money)}</td>
-          <td>{display(row.swiss_operating_kg_co2e ?? null)}</td><td>{number.format(row.unresolved_cost_rows)}</td>
-          <td>{row.estimated_location_kg === null ? 'Unknown' : row.incomplete_carbon_buckets ? 'Partial' : 'Complete'}</td>
+          <td>{display(row.reporting_kg_co2e ?? null)}</td><td>{display(row.imputed_cost_chf ?? null, money)}</td>
+          <td>{number.format(row.unresolved_cost_rows)}</td>
+          <td>{row.reporting_kg_co2e == null ? 'Unknown' : row.incomplete_carbon_buckets ? 'Partial' : 'Complete'}</td>
         </tr>)}</tbody></table>
         {!visible.length ? <p className="empty">No records for this period.</p> : null}
       </div>
@@ -103,7 +104,7 @@ function Scorecard({ result, scenario, horizon }: { result: Models['GoldPackage'
     ['Location-based CO₂ savings', `${display(score.savings_location_kg)} ${emissionsUnit}`, `${display(result.carbon_target, percent)} annual target`],
     ['Implementation cost', display(score.implementation_chf, money), `${display(result.implementation_cap_chf, money)} maximum`],
   ];
-  const isAssessable = score.target_status === 'meets_targets' || score.target_status === 'misses_targets';
+  const hasMargins = score.cost_margin_chf !== null && score.carbon_margin_kg !== null;
   return <>
     <span className={`gold-tag gold-tag-${score.target_status}`}>{statuses[score.target_status]}</span>
     <p className="gold-coverage">{result.candidate_set_note}</p>
@@ -113,8 +114,8 @@ function Scorecard({ result, scenario, horizon }: { result: Models['GoldPackage'
     <dl className="gold-score-grid">{values.map(([label, value, target]) => <div key={label}>
       <dt>{label}</dt><dd>{value}</dd><small>{target}</small>
     </div>)}</dl>
-    {isAssessable ? <p className="gold-coverage">
-      Cost margin {display(score.cost_margin_chf, money)} · CO₂ margin {display(score.carbon_margin_kg)} {emissionsUnit}
+    {hasMargins ? <p className="gold-coverage">
+      Modeled savings {display(score.cost_reduction, percent)} CHF and {display(score.carbon_reduction, percent)} emissions. Cost margin {display(score.cost_margin_chf, money)} · CO₂ margin {display(score.carbon_margin_kg)} {emissionsUnit}
       {' · '}Budget remaining {display(score.budget_remaining_chf, money)}.
       {score.meets_all_three_scenarios ? ' Meets all three scenarios.' : ''}
     </p> : null}
@@ -227,8 +228,8 @@ function GoldDetails({ run, scenario, setScenario, overview, open }: {
         <p role="status">Loading package…</p> : <>
           <Scorecard result={packageResult.data} scenario={scenario} horizon={horizon} />
           <div className="gold-downloads">
-            <a href={`${root}/packages/${run.package_id}/exports/baseline.csv`}>{draft ? 'Draft baseline CSV' : 'Baseline CSV'}</a>
-            <a href={`${root}/packages/${run.package_id}/exports/measures.csv`}>{draft ? 'Draft measures CSV' : 'Measures CSV'}</a>
+            <a href={`${root}/submissions/${run.run_id}/baseline.csv`}>{draft ? 'Draft baseline CSV' : 'Baseline CSV'}</a>
+            <a href={`${root}/submissions/${run.run_id}/measures.csv`}>{draft ? 'Provisional submission measures CSV' : 'Submission measures CSV'}</a>
             <small>Submission exports use the mid scenario and steady-state annual savings.</small>
           </div>
         </>}

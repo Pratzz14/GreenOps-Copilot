@@ -72,6 +72,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/runs/{run_id}/coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Coverage */
+        get: operations["coverage_api_v1_runs__run_id__coverage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/runs/{run_id}/utilization": {
         parameters: {
             query?: never;
@@ -81,6 +98,57 @@ export interface paths {
         };
         /** Utilization */
         get: operations["utilization_api_v1_runs__run_id__utilization_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/recommendations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Recommendations */
+        get: operations["recommendations_api_v1_runs__run_id__recommendations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/recommendation-groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Recommendation Groups */
+        get: operations["recommendation_groups_api_v1_runs__run_id__recommendation_groups_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/recommendations/{recommendation_id}/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Recommendation Evidence */
+        get: operations["recommendation_evidence_api_v1_runs__run_id__recommendations__recommendation_id__evidence_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -285,6 +353,23 @@ export interface paths {
         };
         /** Source */
         get: operations["source_api_v1_data_quality_sources__source_name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/data-quality/sources/{source_name}/raw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Raw Source */
+        get: operations["raw_source_api_v1_data_quality_sources__source_name__raw_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -894,6 +979,16 @@ export interface components {
             estimated_kwh: string | null;
             /** Estimated Location Kg */
             estimated_location_kg: string | null;
+            /** Reporting Kg Co2E */
+            reporting_kg_co2e?: string | null;
+            /** Planning Kwh */
+            planning_kwh?: string | null;
+            /** Planning Kg Co2E */
+            planning_kg_co2e?: string | null;
+            /** Planning Energy Boundaries */
+            planning_energy_boundaries?: string[];
+            /** Needs Energy Factor */
+            needs_energy_factor?: boolean | null;
             /** Unresolved Cost Rows */
             unresolved_cost_rows: number;
             /** Incomplete Energy Buckets */
@@ -904,6 +999,53 @@ export interface components {
             spend_rank: number | null;
             /** Emissions Rank */
             emissions_rank: number | null;
+        };
+        /**
+         * GoldCoverageRow
+         * @description Annual activity and estimate state for one workload boundary and location.
+         */
+        GoldCoverageRow: {
+            /** Boundary Id */
+            boundary_id: string;
+            /** Provider */
+            provider: string;
+            /** Tool */
+            tool: string;
+            /** Location */
+            location: string;
+            /** Activity Quantity */
+            activity_quantity: string | null;
+            /** Activity Unit */
+            activity_unit: string | null;
+            /** Energy Kwh */
+            energy_kwh: string | null;
+            /** Location Kg */
+            location_kg: string | null;
+            /** Swiss Operating Kg Co2E */
+            swiss_operating_kg_co2e: string | null;
+            /** Reporting Kg Co2E */
+            reporting_kg_co2e?: string | null;
+            /** Planning Kwh */
+            planning_kwh?: string | null;
+            /** Planning Kg Co2E */
+            planning_kg_co2e?: string | null;
+            /** Emissions Basis */
+            emissions_basis: ("CO2" | "CO2e") | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "estimated" | "partial_activity" | "missing_activity" | "missing_energy_factor" | "missing_grid_factor";
+            /** Months */
+            months: number;
+            /** Months Missing Activity */
+            months_missing_activity: number;
+            /** Months Partial Activity */
+            months_partial_activity: number;
+            /** Factor Sources */
+            factor_sources: components["schemas"]["GoldFactorSource"][];
+            /** Evidence Set Id */
+            evidence_set_id: string;
         };
         /** GoldFactor */
         GoldFactor: {
@@ -931,6 +1073,15 @@ export interface components {
             source_date: string | null;
             /** Definition And Rationale */
             definition_and_rationale: string;
+        };
+        /** GoldFactorSource */
+        GoldFactorSource: {
+            /** Factor Id */
+            factor_id: string;
+            /** Factor Name */
+            factor_name: string;
+            /** Source Reference */
+            source_reference: string;
         };
         /** GoldFinding */
         GoldFinding: {
@@ -1026,6 +1177,14 @@ export interface components {
             recovered_cost_chf?: string | null;
             /** Swiss Operating Kg Co2E */
             swiss_operating_kg_co2e?: string | null;
+            /** Reporting Kg Co2E */
+            reporting_kg_co2e?: string | null;
+            /**
+             * Reporting Carbon Coverage
+             * @default unknown
+             * @enum {string}
+             */
+            reporting_carbon_coverage: "complete" | "partial" | "unknown";
             /**
              * Cost Coverage
              * @enum {string}
@@ -1111,6 +1270,62 @@ export interface components {
             reason: string;
             /** Evidence Set Id */
             evidence_set_id: string;
+        };
+        /** GoldRecommendation */
+        GoldRecommendation: {
+            /** Id */
+            id: string;
+            /** Finding Key */
+            finding_key: string;
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "Data cluster" | "Server" | "Licence";
+            /** Resource */
+            resource: string;
+            /** Proposed Change */
+            proposed_change: string;
+            /** Observed */
+            observed: number;
+            /** Qualifying */
+            qualifying: number;
+            /** Months */
+            months: string[];
+            /** Persistent Unused */
+            persistent_unused: number | null;
+            /** Cost Center */
+            cost_center?: string | null;
+            /**
+             * Rule Status
+             * @enum {string}
+             */
+            rule_status: "eligible" | "human_review" | "blocked";
+            /**
+             * Safety Status
+             * @enum {string}
+             */
+            safety_status: "eligible" | "human_review" | "blocked";
+            /** Responsible Role */
+            responsible_role: string;
+            /** Next Check */
+            next_check: string;
+            estimate: components["schemas"]["GoldMeasure"] | null;
+            ai_tag: components["schemas"]["GoldRecommendationTag"] | null;
+            /** Protection Evidence Ids */
+            protection_evidence_ids: string[];
+        };
+        /** GoldRecommendationTag */
+        GoldRecommendationTag: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "eligible" | "human_review";
+            /** Reason */
+            reason: string;
+            /** Evidence Id */
+            evidence_id: string;
         };
         /** GoldRun */
         GoldRun: {
@@ -1272,6 +1487,57 @@ export interface components {
                 [key: string]: string | null;
             }[];
         };
+        /** GroupedRecommendationMember */
+        GroupedRecommendationMember: {
+            /** Id */
+            id: string;
+            /** Finding Key */
+            finding_key: string;
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "Data cluster" | "Server" | "Licence";
+            /** Resource */
+            resource: string;
+            /** Proposed Change */
+            proposed_change: string;
+            /** Observed */
+            observed: number;
+            /** Qualifying */
+            qualifying: number;
+            /** Months */
+            months: string[];
+            /** Persistent Unused */
+            persistent_unused: number | null;
+            /** Cost Center */
+            cost_center?: string | null;
+            /**
+             * Rule Status
+             * @enum {string}
+             */
+            rule_status: "eligible" | "human_review" | "blocked";
+            /**
+             * Safety Status
+             * @enum {string}
+             */
+            safety_status: "eligible" | "human_review" | "blocked";
+            /** Responsible Role */
+            responsible_role: string;
+            /** Next Check */
+            next_check: string;
+            estimate: components["schemas"]["GoldMeasure"] | null;
+            ai_tag: components["schemas"]["GoldRecommendationTag"] | null;
+            /** Protection Evidence Ids */
+            protection_evidence_ids: string[];
+            /** Monthly Spend */
+            monthly_spend: components["schemas"]["MonthlyRecommendationSpend"][];
+            licence_spend: components["schemas"]["LicenceRecommendationSpend"] | null;
+            /** Metric Gaps */
+            metric_gaps: {
+                [key: string]: string | null;
+            };
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1347,6 +1613,21 @@ export interface components {
             missing_department_rows: number[];
             /** Notes */
             notes: string;
+        };
+        /** LicenceRecommendationSpend */
+        LicenceRecommendationSpend: {
+            /** Annual */
+            annual: string | null;
+            /** First Year */
+            first_year: string | null;
+            /** Price Month */
+            price_month: string;
+            /** Unit Chf */
+            unit_chf: string | null;
+            /** Effective Date */
+            effective_date: string | null;
+            /** Reason */
+            reason: string | null;
         };
         /** Lineage */
         Lineage: {
@@ -1424,6 +1705,33 @@ export interface components {
             /** Rows */
             rows: number;
         };
+        /** MonthlyRecommendationSpend */
+        MonthlyRecommendationSpend: {
+            /** Month */
+            month: string;
+            /** Amount */
+            amount: string | null;
+            /** Reason */
+            reason: string | null;
+            /** Unused Seats */
+            unused_seats?: number | null;
+            /** Seat Price */
+            seat_price?: string | null;
+            /** Currency */
+            currency?: string | null;
+            /** Fx Rate */
+            fx_rate?: string | null;
+            /** Unit Chf */
+            unit_chf?: string | null;
+            /** Source File */
+            source_file?: string | null;
+            /** Source Row */
+            source_row?: number | null;
+            /** Calculation */
+            calculation?: string | null;
+            /** Sources */
+            sources?: components["schemas"]["RecommendationSourceRows"][];
+        };
         /** Page */
         Page: {
             /** Version */
@@ -1495,6 +1803,65 @@ export interface components {
             sources: components["schemas"]["SourceSummary"][];
             /** Limitations */
             limitations: string[];
+        };
+        /** RecommendationEvidence */
+        RecommendationEvidence: {
+            /** File */
+            file: string;
+            /** Row */
+            row: number;
+        };
+        /** RecommendationGroup */
+        RecommendationGroup: {
+            /** Id */
+            id: string;
+            /** Scope */
+            scope: string;
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "schedule" | "shutdown" | "resize";
+            /** Members */
+            members: components["schemas"]["GroupedRecommendationMember"][];
+            /** Persistent Unused */
+            persistent_unused: number | null;
+            /** Cost Center Count */
+            cost_center_count: number;
+            /** Safety Counts */
+            safety_counts: {
+                [key: string]: number;
+            };
+            /** Savings */
+            savings: {
+                [key: string]: {
+                    [key: string]: components["schemas"]["RecommendationTotals"];
+                };
+            };
+            /** Omitted Measure Count */
+            omitted_measure_count: number;
+            /** Monthly Spend */
+            monthly_spend: {
+                [key: string]: components["schemas"]["RecommendationTotals"];
+            };
+            /** Display Month */
+            display_month: string;
+        };
+        /** RecommendationSourceRows */
+        RecommendationSourceRows: {
+            /** File */
+            file: string;
+            /** Rows */
+            rows: number[];
+        };
+        /** RecommendationTotals */
+        RecommendationTotals: {
+            /** Eligible */
+            eligible: string | null;
+            /** Conditional */
+            conditional: string | null;
+            /** Quantified */
+            quantified: number;
         };
         /** ResultMetadata */
         ResultMetadata: {
@@ -1692,6 +2059,12 @@ export interface components {
             date_coverage: components["schemas"]["Coverage"] | null;
             /** Gap Count */
             gap_count: number;
+            /** Grain */
+            grain?: string | null;
+            /** Additivity */
+            additivity?: ("additive_total" | "mixed" | "period_level" | "point_in_time" | "reference") | null;
+            /** Additivity Note */
+            additivity_note?: string | null;
         };
         /** Starter */
         Starter: {
@@ -1968,7 +2341,7 @@ export interface operations {
     breakdowns_api_v1_runs__run_id__breakdowns_get: {
         parameters: {
             query?: {
-                group?: "department" | "tool" | "provider" | "location" | "subject";
+                group?: "department" | "tool" | "provider" | "location" | "subject" | "platform";
                 scenario?: "low" | "mid" | "high";
             };
             header?: never;
@@ -2017,12 +2390,63 @@ export interface operations {
             };
         };
     };
+    coverage_api_v1_runs__run_id__coverage_get: {
+        parameters: {
+            query?: {
+                scenario?: "low" | "mid" | "high";
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoldCoverageRow"][];
+                };
+            };
+            /** @description Unknown Gold result */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Gold publication is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     utilization_api_v1_runs__run_id__utilization_get: {
         parameters: {
             query?: {
                 months?: string[] | null;
                 scenario?: "low" | "mid" | "high";
-                group?: "department" | "tool" | "provider" | "location" | "subject";
+                group?: "department" | "tool" | "provider" | "location" | "subject" | "platform";
                 driver?: string;
                 include_estimates?: boolean;
             };
@@ -2041,6 +2465,164 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Unknown Gold result */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Gold publication is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    recommendations_api_v1_runs__run_id__recommendations_get: {
+        parameters: {
+            query?: {
+                months?: string[] | null;
+                scenario?: "low" | "mid" | "high";
+                group?: "department" | "tool" | "provider" | "location" | "subject" | "platform";
+                driver?: string;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoldRecommendation"][];
+                };
+            };
+            /** @description Unknown Gold result */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Gold publication is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    recommendation_groups_api_v1_runs__run_id__recommendation_groups_get: {
+        parameters: {
+            query?: {
+                months?: string[] | null;
+                scenario?: "low" | "mid" | "high";
+                group?: "department" | "tool" | "provider" | "location" | "subject" | "platform";
+                driver?: string;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendationGroup"][];
+                };
+            };
+            /** @description Unknown Gold result */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Gold publication is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    recommendation_evidence_api_v1_runs__run_id__recommendations__recommendation_id__evidence_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+                recommendation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendationEvidence"][];
                 };
             };
             /** @description Unknown Gold result */
@@ -2657,6 +3239,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    raw_source_api_v1_data_quality_sources__source_name__raw_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

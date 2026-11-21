@@ -25,8 +25,7 @@ seasonal usage for the prospective year would support a more precise schedule.
 - **Grid factors.** Germany and Ireland use 2025 direct-CO₂ consumption
   references with ±10% sensitivity as a proxy for the baseline period.
   Ireland's source covers emissions within Ireland. The Swiss consumption
-  reference includes imports and reports lifecycle CO₂e. It appears as a
-  separately labeled factor. The direct-CO₂ field remains open.
+  reference includes imports and reports lifecycle CO₂e. Its operating component supplies the Swiss submission proxy, with its CO₂e unit disclosed.
   [Germany UBA](https://www.umweltbundesamt.de/system/files/medien/11850/publikationen/2026-03/16_2026_CC.pdf) ·
   [Ireland SEAI](https://www.seai.ie/data-and-insights/seai-statistics/conversion-factors) ·
   [Swiss VSE](https://www.strom.ch/system/files/media/documents/20260115-ds-teneur-en-co2-du-mix-electrique-suisse.pdf)

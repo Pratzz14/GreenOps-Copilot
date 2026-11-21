@@ -134,6 +134,9 @@
   border-bottom: 1px solid #e3ebe2;
 }
 .catalog-findings dd { margin: 0; font-variant-numeric: tabular-nums; }
+.catalog-grain { max-width: 680px; }
+.catalog-grain dt { flex: 0 0 150px; }
+.catalog-grain dd { text-align: right; }
 @media (max-width: 700px) {
   .layer-heading { padding: 26px 0 17px; }
   .layer-heading p { font-size: 14px; }

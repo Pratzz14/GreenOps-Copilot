@@ -19,7 +19,6 @@ from backend.analysis_ai import KEY_REQUIRED, Draft, DraftError, configured, gen
 from backend.analysis_data import PREPARED, availability, catalog, prepare, schema, unit, unit_key
 from backend.analysis_engine import Visual, compile_visual, direct_projection, execute, validate_sql
 from backend.silver import store
-from src.silver_storage import TABLES
 
 router = APIRouter(prefix="/api/v1/analysis", tags=["analysis"])
 Cell = str | int | float | bool | None
@@ -210,7 +209,7 @@ def get_catalog(request: Request):
 
 def get_definition(request, definition):
     silver = store(request, definition.version)
-    if definition.dataset not in TABLES and definition.dataset not in PREPARED:
+    if definition.dataset not in silver.tables and definition.dataset not in PREPARED:
         raise HTTPException(404, detail="Unknown analysis dataset")
     unavailable = availability(silver, definition.dataset)
     if unavailable:

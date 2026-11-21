@@ -57,14 +57,14 @@ FACTORS = {
         "Switzerland electricity consumption, direct CO2", "kg CO2 per kWh", None, VSE,
         "A compatible direct-CO2 consumption value including imports is unresolved. "
         "The reported lifecycle CO2e is retained separately as context.",
-        "2026-01-15", "grid_mix_location_based_switzerland", "Switzerland",
+        "2026-01-15", location="Switzerland",
     ),
     "grid_ch_operating": Factor(
         "Swiss consumption electricity including imports, operating emissions",
         "kg CO2e per kWh", ("0.026", "0.049", "0.084"), VSE,
         "VSE slide 2: domestic plus imported operating emissions in 2024, provisional 2025 "
-        "and 2022. Excludes upstream emissions. This proxy is reported separately from direct CO2.",
-        "2026-02-25", location="Switzerland",
+        "and 2022. Excludes upstream emissions. Used in the dashboard emissions estimate.",
+        "2026-02-25", "grid_mix_location_based_switzerland", "Switzerland",
     ),
     "grid_ch_context": Factor(
         "Switzerland consumption including imports, lifecycle context", "kg CO2e per kWh",
@@ -135,6 +135,26 @@ FACTORS = {
         "anchors the high scenario. Mid is a planning assumption. Applies once to IT-only activity.",
         "2026-11-21", "pue",
     ),
+    "powerbi_capacity": Factor(
+        "Assumed Power BI capacity size", "vCores per capacity", ("4", "8", "16"),
+        "https://learn.microsoft.com/en-us/fabric/enterprise/licenses#capacity",
+        "Illustrative capacity sizes. Multiply billed capacity-days by 24 hours and the vCore and PUE factors.",
+        "2026-11-21",
+    ),
+    "network_transfer": Factor(
+        "Network transmission planning proxy", "kWh per GB", ("0.0065", "0.0065", "0.0065"),
+        "https://www.ofcom.org.uk/siteassets/resources/documents/research-and-data/technology-research/2022/carbon-emissions-of-streaming-and-digital-terrestrial-television-3.pdf",
+        "2020 UK fixed-network attribution applied to billed volume. Covers transmission only. "
+        "Network location and overlap are unresolved. No additional PUE.",
+        "2022-10-01",
+    ),
+    "grid_eu_planning": Factor(
+        "EU electricity generation planning proxy", "kg CO2e per kWh", ("0.16062687", "0.1784743", "0.19632173"),
+        "https://www.eea.europa.eu/en/analysis/indicators/greenhouse-gas-emission-intensity-of-1",
+        "2025 estimated EU generation average with ±10% sensitivity for mixed EU AI workloads. "
+        "Provider routing and country shares are unverified.",
+        "2026-11-21",
+    ),
     "allocation": Factor(
         "Shared cost attribution", "text", None, "Silver cost facts and ownership",
         "Direct attribution where supported. Leave ambiguous departments Unallocated, and retain "
@@ -144,5 +164,5 @@ FACTORS = {
     ),
 }
 
-GRID = {"Germany": "grid_de", "Ireland": "grid_ie", "Switzerland": "grid_ch"}
+GRID = {"Germany": "grid_de", "Ireland": "grid_ie", "Switzerland": "grid_ch_operating"}
 FACILITY_FACTORS = {"tokens", "message"}

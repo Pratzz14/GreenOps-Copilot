@@ -12,6 +12,7 @@ from backend.routes import router
 from backend.quality import router as quality_router, load_quality
 from backend.services import load_health
 from backend.silver import load_silver, router as silver_router
+from src.pipeline import active_output
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -19,10 +20,12 @@ ROOT = Path(__file__).resolve().parents[1]
 def create_app(outputs: Path = ROOT / "outputs", dist: Path = ROOT / "frontend" / "dist") -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        app.state.outputs = outputs
-        app.state.health = load_health(outputs)
-        app.state.quality, app.state.quality_error = load_quality(outputs, app.state.health.snapshot_id)
-        app.state.silver, app.state.silver_error = load_silver(outputs, app.state.health.snapshot_id)
+        active = active_output(outputs)
+        app.state.outputs = active
+        app.state.output_root = outputs
+        app.state.health = load_health(active)
+        app.state.quality, app.state.quality_error = load_quality(active, app.state.health.snapshot_id)
+        app.state.silver, app.state.silver_error = load_silver(active, app.state.health.snapshot_id)
         app.state.analysis = Runtime(outputs)
         yield
 

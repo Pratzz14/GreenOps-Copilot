@@ -7,6 +7,32 @@ The local app opens the Gold Dashboard when a validated run is published.
 Data Explorer includes profiles for the 13 core sources, cleaned Silver data,
 and the Gold calculation tables. See **Build and verify Gold** for the pipeline.
 
+## Hackathon submission
+
+Submit the prototype and both filled CSVs from [submission/](submission/).
+
+- [Baseline and assumptions CSV](submission/template_baseline_and_assumptions.csv)
+- [Measures package CSV](submission/template_measures_package.csv)
+
+The September 2025 through August 2026 baseline and the selected
+9-measure portfolio come from the same Gold run. At steady state, the
+portfolio models CHF 58,606 in annual savings (12.49%), 23,849 kWh of annual
+electricity savings, and 5,913 kg CO₂e of annual location-based emissions
+savings (32.62%). Estimated implementation costs CHF 16,500
+(15 person-days). The modeled savings fall short of the 25% cost and 40%
+emissions targets. The package is provisional because coverage is partial,
+some emissions use proxies, and some measures require owner approval.
+
+The selected package includes scaling back the customer portal's test pool
+after acceptance, reclaiming AI and SaaS seats at renewal, and pausing the
+development cluster around quarterly training. The Gold measures catalogue
+also includes a Zurich development pilot that keeps Frankfurt GPU training
+intact. Its savings still depend on a like-for-like Zurich quote and cutover
+validation.
+
+Case data attribution: Sample data ALTYCA, sprintd Basel 2026.
+[Organizer requirements](https://github.com/Fa-Bee/sprintd-basel-green-ai-data#submission-baseline-assumptions-and-package-of-measures)
+
 ## Supported environment
 
 Verified on Windows with **Python 3.14.6**, **Node 22.14.0**, **npm 10.9.2**.
@@ -157,6 +183,52 @@ For the active Phase 2 review session, the combined EDA server uses
 [port 8001](http://127.0.0.1:8001) because the older server already occupies
 8000. Use `--port 8001` and set `EDA_URL` accordingly when reproducing that session.
 
+## Build with the extra datasets
+
+Run the full pipeline from the project root:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.pipeline --decision-as-of 2026-11-21
+```
+
+The full build archives the raw inputs, profiles 28 sources, publishes the
+normalized CSVs and reconciled Silver facts, and builds Gold against that exact
+Silver version. Restart the API to load the selected release. The existing
+individual commands below still support the core-only workflow. Use
+`--core-only` for a core-only pipeline release or `--activate <release-id>`
+to select an earlier validated release. Use `--activate legacy` to return to
+the pre-pipeline publication if its Bronze, Silver and Gold versions agree.
+
+In Silver Analyst Workspace, open **supplemental_comparisons** to compare
+invoice and gateway tokens, agent and gateway token volumes by model class,
+logged and billed CI time, sampled and billed web traffic, Power BI refresh
+minutes against billed capacity-days, and the provider report against six
+candidate ledger scopes. It also holds two allocation views, recorded CHF per
+FTE and per booked project hour. Each row is aggregated to month and entity
+before it is joined, names its `basis`, and stays outside the financial ledger.
+Only `same_unit` rows carry a difference.
+
+Job runs carry a `schedule_class` (flexible, fixed deadline, protection window
+or by arrangement). Logs carry modeled `retained_gb_days`. Backup chains and
+catalogue tables carry protection reasons and review-candidate flags, where an
+unknown retention requirement stays unknown.
+
+Gold measures use the extra logs as evidence for review. Microsoft 365
+storage GB-days and Power BI refresh activity are available for analysis.
+Their baseline electricity estimates require matching service intensity or
+capacity evidence, so Microsoft 365 storage appears in the baseline as
+activity with a missing energy factor. The dashboard shows one emissions
+total: direct CO₂ for Germany and Ireland plus Swiss operating CO₂e. Its
+information panel gives both parts. The submission CSVs and the 40% target
+stay on direct CO₂. Open **Coverage by workload** on the dashboard, or call
+`GET /api/v1/runs/{run_id}/coverage`, to see each workload's activity,
+factor sources and whether activity, an energy factor or a direct-CO₂ grid
+factor is missing.
+
+Run the release tests with `python -m pytest tests/test_supplemental.py
+tests/test_pipeline.py`. Set `GREENOPS_FULL_PIPELINE=1` to also rebuild the
+complete case data and check the pinned baseline (several minutes).
+
 ## Build and reconcile Silver
 
 Run these commands after profiling Bronze, then restart the API.
@@ -255,15 +327,22 @@ require human review. Choose a ranking row to focus the monthly trend. The
 chart filters leave the baseline and package at company-wide scope.
 Run `npm --prefix frontend run test:dashboard` against the combined local app.
 
+Recommendations use recurring baseline observations and share the dashboard filters.
+Run `.\.venv\Scripts\python.exe -m backend.recommendations` to add OpenAI review
+tags to the current published run, or pass `--tag-recommendations` when publishing
+Gold. The batch uses the existing `OPENAI_API_KEY`. Dashboard reads use the
+saved tags and rule-based decisions.
+
 Open **Gold** in **Data Explorer** to see the baseline and browse all 14
 published tables. Expand a table to inspect its schema and records. Open
 **Detailed overview** for spending breakdowns, findings, safety decisions, and
 the savings package. The scorecard defaults to the mid
 steady-state scenario used in the exports. Switch to **First 12 months** to
-see the effect of lead times and effective dates. On the sample data the exports are drafts because coverage is partial. The
-measures CSV lists selected evidence-eligible estimates. Download the
-conditional draft separately to review the package that includes
-proposals with remaining verification steps.
+see the effect of lead times and effective dates. The submission exports use the assessed portfolio's mid steady-state estimates.
+The scorecard stays provisional while coverage and owner approvals are open.
+Download the files from Dashboard or Gold, or run
+`python -m src.exports` to generate both official filenames together under
+`outputs/submission/<run_id>/` for the active release.
 
 Run `npm --prefix frontend run test:gold` against the combined local app.
 Set `EDA_URL` for a port other than 8001. [Demo](docs/DEMO.md#gold-layer-demo) ·

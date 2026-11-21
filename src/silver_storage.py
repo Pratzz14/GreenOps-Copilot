@@ -9,12 +9,14 @@ from pathlib import Path
 
 from src.ingest import CORE_FILES, ROOT
 from src.profile import read_csv
+from src.source_specs import EXTRA_FILES
 
 SOURCE_TABLES = tuple(Path(name).stem for name in CORE_FILES)
 TABLES = (*SOURCE_TABLES, 'cost_facts', 'usage_facts', 'assets', 'contracts',
           'ownership', 'resource_relationships')
 REPORTS = ('transformation_log', 'profiles', 'unresolved_issues')
 FINANCIAL = ('cost_baseline', 'reconciliation_report')
+EXTRA_TABLES = (*EXTRA_FILES, 'supplemental_comparisons')
 VERSION_PATTERN = re.compile(r'[a-f0-9]{64}')
 
 
@@ -28,11 +30,17 @@ def file_hash(path):
         return hashlib.file_digest(handle, 'sha256').hexdigest()
 
 
-def write_csv(path, rows, columns=()):
+def published_tables(directory):
+    _, rows = read_csv(directory / 'manifest.csv')
+    return (*TABLES, *EXTRA_TABLES) if any(
+        row['artifact'] == 'supplemental_comparisons.csv' for row in rows) else TABLES
+
+
+def write_csv(path, rows, columns=(), *, encoding="utf-8"):
     columns = list(dict.fromkeys(chain(columns, (key for row in rows for key in row))))
     if not columns:
         raise ValueError(f'Missing schema for {path.name}')
-    with path.open('w', encoding='utf-8', newline='') as handle:
+    with path.open('w', encoding=encoding, newline='') as handle:
         writer = csv.DictWriter(handle, columns, lineterminator='\n')
         writer.writeheader()
         writer.writerows(rows)

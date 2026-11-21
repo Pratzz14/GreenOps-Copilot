@@ -3,7 +3,7 @@ from collections import Counter, defaultdict
 from decimal import Decimal
 
 from backend.silver import store
-from src.silver_storage import SOURCE_TABLES
+from src.source_specs import EXTRA_SPECS
 
 PREPARED = {
     "server_metrics_with_assets": ("Weekly observations with inventory snapshot context", "Server and observed week",
@@ -25,6 +25,8 @@ GRAINS = {
     "contracts": "Originating contract month and version", "ownership": "Documented association",
     "resource_relationships": "Relationship evidence record",
 }
+GRAINS.update({table: f'{spec.cadence} · {spec.key}' for table, spec in EXTRA_SPECS.items()})
+GRAINS['supplemental_comparisons'] = 'Comparison × month × entity × unit'
 MONEY = {"cost_chf", "converted_cost_chf", "recorded_cost_chf", "amount_chf"}
 PRICES = {"price_per_seat", "price_per_licence", "fx_rate"}
 FINANCIAL = MONEY | PRICES | {"amount_original", "amount", "cost_in_billing_currency", "line_item_unblended_cost"}
@@ -39,6 +41,16 @@ PLATFORM_FIELDS = dict(resource_id="text", reporting_month="text", observed_clus
 
 
 def unit(name, field):
+    if name == "supplemental_comparisons" and field in {"extra_quantity", "core_quantity", "difference"}:
+        return "Source-dependent"
+    if field == "baseline_storage_gb_days":
+        return "GB-days"
+    if field == "duration_seconds":
+        return "seconds"
+    if field in {"refresh_duration_min", "teams_video_minutes", "baseline_teams_video_minutes"}:
+        return "minutes"
+    if field == "cpu_h":
+        return "CPU-hours"
     if field in MONEY:
         return "CHF"
     if field in FINANCIAL:
@@ -65,6 +77,10 @@ def unit(name, field):
 
 
 def unit_key(name, field, columns):
+    if name == "supplemental_comparisons" and field in {"extra_quantity", "core_quantity", "difference"}:
+        return "unit"
+    if (name, field) in {("m365_usage", "storage"), ("log_volume", "log_gb")}:
+        return "storage_unit" if name == "m365_usage" else "unit"
     if field in FINANCIAL - MONEY:
         return next((key for key in ("original_currency", "currency") if key in columns), None)
     if field in {"quantity", "line_item_usage_amount"}:
@@ -191,7 +207,7 @@ def catalog(request):
         purpose, grain, inputs = PREPARED.get(name, (source.purpose if source else "", GRAINS.get(name, ""), [name]))
         columns = schema(silver, name)
         limits = list(source.limitations) if source else []
-        if name not in SOURCE_TABLES:
+        if name not in silver.source_tables:
             limits.append("Connected representation. Its records can overlap Silver source tables.")
         if name in {"ai_usage", "ai_usage_with_cost", "usage_facts", "cost_facts"}:
             limits.append("Consumer department and owner department describe different roles. Cached tokens are included in input tokens.")
@@ -214,7 +230,7 @@ def catalog(request):
         else:
             date_context = "No time-series grain. Linked records follow their originating dates where available."
         entries.append(dict(date_context=date_context, name=name, purpose=purpose, grain=grain, inputs=inputs,
-                            kind="prepared" if name in PREPARED else "source" if name in SOURCE_TABLES else "connected",
+                            kind="prepared" if name in PREPARED else "source" if name in silver.source_tables else "connected",
                             unavailable=availability(silver, name), limitations=limits,
                             fields=[dict(name=field, type=kind, unit=unit(name, field),
                                          unit_key=unit_key(name, field, columns)) for field, kind in columns.items()]))

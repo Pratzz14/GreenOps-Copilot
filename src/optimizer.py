@@ -195,16 +195,15 @@ def persist_package(data, selected, baselines, assessable, kind, candidate_count
 
 
 def build_packages(data, cost_coverage, carbon_coverage):
-    baseline_cost = subtotal(row["recorded_cost_chf"] for row in data.tables["cost_monthly"])
+    recorded = subtotal(row["recorded_cost_chf"] for row in data.tables["cost_monthly"])
+    imputed = subtotal(row["imputed_cost_chf"] for row in data.tables["cost_monthly"])
+    baseline_cost = subtotal((recorded, imputed))
     baselines = {}
     for scenario in SCENARIOS:
         impact = [row for row in data.tables["impact_monthly"] if row["scenario"] == scenario]
         baselines[scenario] = (baseline_cost, subtotal(row["energy_kwh"] for row in impact),
                                subtotal(row["location_kg"] for row in impact))
-    assessable = cost_coverage == carbon_coverage == "complete" and all(
-        cost is not None and cost > 0 and co2 is not None and co2 > 0
-        for cost, _, co2 in baselines.values()
-    )
+    assessable = False  # The submission uses operating emissions proxies on a CO2e basis.
     constraints = [(row["measure_id"], row["related_measure_id"], row["constraint_type"])
                    for row in data.tables["measure_constraint"]]
     candidates = list(candidates_for(data))

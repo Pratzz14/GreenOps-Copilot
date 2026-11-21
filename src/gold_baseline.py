@@ -35,6 +35,12 @@ STREAMS = {
     "ai_subscriptions.csv": "ai_subscription",
     "saas_contracts.csv": "saas",
 }
+PLANNING_FACTORS = {
+    "m365:storage-gb-days": ("storage", "pue"),
+    "azure_costs:capacity-day": ("powerbi_capacity", "database_vcore", "pue", "grid_ch_operating"),
+    "aws_costs:gb": ("network_transfer",),
+    "hoster_invoice:gb": ("network_transfer",),
+}
 KNOWN_REGIONS = {
     "Switzerland (Zurich)": "Switzerland", "Germany (Frankfurt)": "Germany",
     "Ireland (Dublin)": "Ireland", "EU (mixed)": "Mixed",
@@ -81,7 +87,10 @@ def estimate(quantity, factor, location, scenario):
     energy = quantity * FACTORS[factor].value(scenario)
     if factor not in FACILITY_FACTORS:
         energy *= FACTORS["pue"].value(scenario)
-    grid = FACTORS[GRID[location]].value(scenario) if location in GRID else None
+    grid_key = GRID.get(location)
+    if location == "Mixed" and factor in FACILITY_FACTORS:
+        grid_key = "grid_eu_planning"
+    grid = FACTORS[grid_key].value(scenario) if grid_key else None
     return rounded(energy), rounded(energy * grid) if grid is not None else None
 
 
@@ -338,6 +347,22 @@ def observations(data):
             yield row, dims, "subscription:messages", "message", decimal(row["messages_30d"]) if accepted(row) else None
         else:
             yield row, dims, "saas:activity-unknown", None, None
+    if (data.silver / "m365_usage.csv").is_file():
+        # Allocate each observed storage stock to the months containing its covered days.
+        for row in data.source("m365_usage"):
+            if row["record_status"] == "duplicate" or row.get("baseline_overlap") != "True":
+                continue
+            subject = data.subject("Microsoft", "Microsoft 365", "tool", row)
+            dims = (subject, "Microsoft", row.get("department") or "Unallocated", "Microsoft 365", "Mixed")
+            first = date.fromisoformat(row["week_start"])
+            days_by_month = Counter(
+                day.isoformat()[:7] for offset in range(7)
+                if START <= (day := first + timedelta(days=offset)) < STOP
+            )
+            storage = decimal(row["storage_gb"]) if row["record_status"] == "accepted" else None
+            for reporting_month, days in days_by_month.items():
+                yield ({**row, "reporting_month": reporting_month}, dims, "m365:storage-gb-days",
+                       None, storage * days if storage is not None else None)
 
 
 def combine_coverage(values):
@@ -347,9 +372,32 @@ def combine_coverage(values):
     return "complete" if states == {"complete"} else "partial"
 
 
+def planning_estimate(boundary, quantity, energy, location, scenario, eu_hosting):
+    if eu_hosting and energy is not None:
+        return None, rounded(energy * FACTORS["grid_eu_planning"].value(scenario))
+    if quantity is None:
+        return None, None
+    if boundary == "m365:storage-gb-days":
+        return estimate(quantity, "storage", location, scenario)[0], None
+    if boundary == "azure_costs:capacity-day":
+        hours = quantity * 24 * FACTORS["powerbi_capacity"].value(scenario)
+        kwh, direct = estimate(hours, "database_vcore", location, scenario)
+        emissions = (rounded(kwh * FACTORS["grid_ch_operating"].value(scenario))
+                     if location == "Switzerland" else direct)
+        return kwh, emissions
+    if boundary in {"aws_costs:gb", "hoster_invoice:gb"}:
+        return rounded(quantity * FACTORS["network_transfer"].value(scenario)), None
+    return None, None
+
+
 def build_impact(data):
     groups = defaultdict(list)
     platform_dates = defaultdict(set)
+    catalogue = data.silver / "data_center_locations.csv"
+    eu_locations = [row for row in (data.source("data_center_locations") if catalogue.is_file() else ())
+                    if row.get("provider") == "AI provider (API)" and row["record_status"] == "accepted"
+                    and (row.get("used_by_sme") or "").casefold() in {"yes", "true"}]
+    eu_catalogue = eu_locations and all(row["region"] == "EU (mixed)" for row in eu_locations)
     for row, dims, boundary, factor, quantity in observations(data):
         group = (month(row), *dims, boundary, factor)
         groups[group].append((row, quantity))
@@ -373,18 +421,40 @@ def build_impact(data):
                        if factor else f"{boundary}: the export has no supported activity-to-energy conversion.")
         if partial:
             explanation += " Some qualifying observations are missing or unresolved."
-        if location == "Switzerland":
-            factors.append("grid_ch_operating")
-        if location not in GRID or location == "Switzerland":
-            explanation += " A compatible direct-CO2 grid factor is unavailable for this workload."
-        evidence = data.evidence(("impact", group), explanation, rows, factors)
+        if location == "Mixed" and factor in FACILITY_FACTORS:
+            factors.append("grid_eu_planning")
+            explanation += " Mixed EU hosting uses an EU generation proxy."
+        elif location not in GRID:
+            explanation += " A location-based grid factor is unavailable for this workload."
+        unit = {"gateway:tokens": "1,000 tokens", "subscription:messages": "messages",
+                "platform:observed-node-hours": "node-hours", "m365:storage-gb-days": "GB-days"}.get(boundary)
+        if unit is None and ":" in boundary and not boundary.startswith("saas:"):
+            unit = "runner-hour" if factor == "build_runner" else boundary.split(":", 1)[1]
+        planning_factors = PLANNING_FACTORS.get(boundary, ())
+        if location != "Switzerland":
+            planning_factors = tuple(key for key in planning_factors if key != "grid_ch_operating")
+        eu_hosting = bool(eu_catalogue and boundary == "gateway:tokens" and location == "Mixed" and factor is None)
+        if planning_factors or eu_hosting:
+            explanation += " The planning estimate covers the activity shown and is excluded from baseline totals."
+        if eu_hosting:
+            rows = (*rows, *eu_locations)
+            planning_factors = (*planning_factors, "grid_eu_planning")
+        evidence = data.evidence(("impact", group), explanation, rows, (*factors, *planning_factors))
         for scenario in SCENARIOS:
             energy, carbon = estimate(quantity, factor, location, scenario)
+            swiss = (rounded(energy * FACTORS["grid_ch_operating"].value(scenario))
+                     if location == "Switzerland" and energy is not None else None)
+            planning_kwh, planning_carbon = planning_estimate(boundary, quantity, energy, location, scenario, eu_hosting)
             data.add("impact_monthly", report_month=report_month, subject_id=subject, provider=provider,
                      department=department, tool=tool, location=location, boundary_id=boundary,
                      scenario=scenario, energy_kwh=energy, location_kg=carbon,
-                     swiss_operating_kg_co2e=(rounded(energy * FACTORS["grid_ch_operating"].value(scenario))
-                                              if location == "Switzerland" and energy is not None else None),
+                     activity_quantity=rounded(quantity), activity_unit=unit,
+                     energy_gap_reason=("missing_activity" if quantity is None else "missing_energy_factor"
+                                        if factor is None else "partial_activity" if partial else None),
+                     carbon_gap_reason=("missing_electricity_estimate" if energy is None else "missing_direct_co2_factor"
+                                        if carbon is None else "partial_activity" if partial else None),
+                     swiss_operating_kg_co2e=swiss, reporting_kg_co2e=carbon if carbon is not None else swiss,
+                     planning_kwh=planning_kwh, planning_kg_co2e=planning_carbon,
                      energy_coverage="unknown" if energy is None else "partial" if partial else "complete",
                      carbon_coverage="unknown" if carbon is None else "partial" if partial else "complete",
                      evidence_set_id=evidence)

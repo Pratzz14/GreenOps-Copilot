@@ -45,8 +45,9 @@ readable by ID. Unknown IDs return 404 when Gold has been published.
 | Route | Result |
 | --- | --- |
 | `GET /runs/current` | Run, Silver and factor versions, decision date, baseline and package IDs |
-| `GET /runs/{run_id}/overview?scenario=mid` | Recorded CHF, modeled kWh and direct CO₂, plus coverage, imputed CHF, recovered CHF within recorded spending, and the separate Swiss operating CO₂e estimate |
-| `GET /runs/{run_id}/breakdowns?group=department&scenario=mid` | Annual and monthly spend and footprint, with separate imputed CHF and Swiss operating CO₂e. Groups also include tool, provider, location, and subject. |
+| `GET /runs/{run_id}/overview?scenario=mid` | Recorded and imputed CHF, modeled kWh, and the dashboard's `reporting_kg_co2e` with `reporting_carbon_coverage`. The existing direct CO₂ fields support submission reporting. |
+| `GET /runs/{run_id}/coverage?scenario=mid` | Annual activity, reporting emissions, gap status and factor evidence by workload boundary and location. `planning_kwh` and `planning_kg_co2e` are workload estimates outside the baseline totals. Returns 404 for runs published before gap reasons were stored. |
+| `GET /runs/{run_id}/breakdowns?group=department&scenario=mid` | Annual and monthly spend and footprint, with the dashboard's `reporting_kg_co2e`. Groups also include tool, platform, provider, location, and subject. |
 | `GET /runs/{run_id}/tables` | The 14 published tables and their row counts for the run |
 | `GET /runs/{run_id}/tables/{table}?limit=25&offset=0` | Column schema and a page of rows from a published table, ordered by primary key. Values preserve their exact text representation, missing values are null, and timestamps are UTC. |
 | `GET /runs/{run_id}/findings`, `/findings/{finding_id}` | Observations, waste hypotheses, and evidence IDs |

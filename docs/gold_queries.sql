@@ -11,7 +11,11 @@ WITH costs AS (
     WHERE run_id = getvariable('gold_run_id')
 ), impact AS (
     SELECT sum(energy_kwh) AS estimated_kwh, sum(location_kg) AS estimated_location_kg,
-           sum(swiss_operating_kg_co2e) AS swiss_operating_kg_co2e
+           sum(swiss_operating_kg_co2e) AS swiss_operating_kg_co2e,
+           sum(reporting_kg_co2e) AS reporting_kg_co2e,
+           CASE WHEN count(reporting_kg_co2e) = 0 THEN 'unknown'
+                WHEN bool_and(reporting_kg_co2e IS NOT NULL AND energy_coverage = 'complete') THEN 'complete'
+                ELSE 'partial' END AS reporting_carbon_coverage
     FROM gold.impact_monthly
     WHERE run_id = getvariable('gold_run_id') AND scenario = getvariable('gold_scenario')
 )
@@ -26,15 +30,15 @@ WHERE r.run_id = getvariable('gold_run_id');
 WITH metrics AS (
     SELECT report_month, subject_id, provider, department, tool, location,
            recorded_cost_chf, imputed_cost_chf, recovered_cost_chf,
-           NULL AS energy_kwh, NULL AS location_kg, NULL AS swiss_operating_kg_co2e,
+           NULL AS energy_kwh, NULL AS location_kg, NULL AS swiss_operating_kg_co2e, NULL AS reporting_kg_co2e,
            missing_amount_rows + missing_fx_rows + review_rows AS unresolved_cost_rows,
            0 AS incomplete_energy_buckets, 0 AS incomplete_carbon_buckets
     FROM gold.cost_monthly WHERE run_id = getvariable('gold_run_id')
     UNION ALL
     SELECT report_month, subject_id, provider, department, tool, location,
-           NULL, NULL, NULL, energy_kwh, location_kg, swiss_operating_kg_co2e, 0,
+           NULL, NULL, NULL, energy_kwh, location_kg, swiss_operating_kg_co2e, reporting_kg_co2e, 0,
            CASE WHEN energy_coverage = 'complete' THEN 0 ELSE 1 END,
-           CASE WHEN carbon_coverage = 'complete' THEN 0 ELSE 1 END
+           CASE WHEN reporting_kg_co2e IS NOT NULL AND energy_coverage = 'complete' THEN 0 ELSE 1 END
     FROM gold.impact_monthly
     WHERE run_id = getvariable('gold_run_id') AND scenario = getvariable('gold_scenario')
 ), labelled AS (
@@ -47,6 +51,7 @@ WITH metrics AS (
            sum(imputed_cost_chf) AS imputed_cost_chf, sum(recovered_cost_chf) AS recovered_cost_chf,
            sum(energy_kwh) AS estimated_kwh, sum(location_kg) AS estimated_location_kg,
            sum(swiss_operating_kg_co2e) AS swiss_operating_kg_co2e,
+           sum(reporting_kg_co2e) AS reporting_kg_co2e,
            sum(unresolved_cost_rows) AS unresolved_cost_rows,
            sum(incomplete_energy_buckets) AS incomplete_energy_buckets,
            sum(incomplete_carbon_buckets) AS incomplete_carbon_buckets
@@ -56,8 +61,8 @@ WITH metrics AS (
 SELECT *,
        CASE WHEN recorded_cost_chf IS NOT NULL THEN
            dense_rank() OVER (PARTITION BY report_month ORDER BY recorded_cost_chf DESC NULLS LAST) END AS spend_rank,
-       CASE WHEN estimated_location_kg IS NOT NULL THEN
-           dense_rank() OVER (PARTITION BY report_month ORDER BY estimated_location_kg DESC NULLS LAST) END AS emissions_rank
+       CASE WHEN reporting_kg_co2e IS NOT NULL THEN
+           dense_rank() OVER (PARTITION BY report_month ORDER BY reporting_kg_co2e DESC NULLS LAST) END AS emissions_rank
 FROM totals ORDER BY report_month NULLS FIRST, spend_rank NULLS LAST, driver;
 
 -- Q03. Subtotals and missing costs by billing stream for the finance reconciliation.
@@ -249,9 +254,9 @@ WITH template(seq, parameter, must_or_bonus, unit) AS (VALUES
     SELECT scenario, sum(energy_kwh) AS estimated_kwh, sum(location_kg) AS estimated_location_kg
     FROM gold.impact_monthly WHERE run_id = getvariable('gold_run_id') GROUP BY scenario
 ), totals AS (
-    SELECT 'total_cost_baseline_year_chf' AS parameter, NULL AS value_low, c.recorded_chf AS value_mid, NULL AS value_high,
+    SELECT 'total_cost_baseline_year_chf' AS parameter, NULL AS value_low, coalesce(c.recorded_chf + coalesce(c.imputed_chf, 0), c.imputed_chf) AS value_mid, NULL AS value_high,
            'Silver cost_facts.csv; run ' || r.run_id AS source,
-           concat('Sum of eligible recorded CHF; separate imputed estimate CHF ', c.imputed_chf, '; coverage ', r.cost_coverage) AS explanation
+           concat('September 2025 through August 2026. Recorded CHF ', c.recorded_chf, '; comparable-price imputation CHF ', coalesce(c.imputed_chf, 0), '; coverage ', r.cost_coverage, '. Unresolved charges remain outside the modeled subtotal.') AS explanation
     FROM costs AS c CROSS JOIN gold.analysis_run AS r WHERE r.run_id = getvariable('gold_run_id')
     UNION ALL
     SELECT 'total_energy_baseline_year_kwh', max(estimated_kwh) FILTER (WHERE scenario = 'low'),
@@ -263,9 +268,9 @@ WITH template(seq, parameter, must_or_bonus, unit) AS (VALUES
     SELECT 'total_co2_location_based_baseline_year_kg', max(estimated_location_kg) FILTER (WHERE scenario = 'low'),
            max(estimated_location_kg) FILTER (WHERE scenario = 'mid'), max(estimated_location_kg) FILTER (WHERE scenario = 'high'),
            'Gold activity and grid-factor evidence; run ' || r.run_id,
-           'Estimated location-based CO2; coverage ' || r.carbon_coverage
+           'Location-based estimate in kg ' || r.emissions_basis || '. Includes Swiss operating emissions and mixed-EU AI generation proxies. Coverage ' || r.carbon_coverage
     FROM impacts CROSS JOIN gold.analysis_run AS r
-    WHERE r.run_id = getvariable('gold_run_id') AND r.emissions_basis = 'CO2' GROUP BY r.run_id, r.carbon_coverage
+    WHERE r.run_id = getvariable('gold_run_id') GROUP BY r.run_id, r.carbon_coverage, r.emissions_basis
 )
 SELECT t.parameter, t.must_or_bonus, cast(coalesce(b.value_low, f.value_low) AS VARCHAR) AS value_low,
        coalesce(cast(b.value_mid AS VARCHAR), cast(f.value_mid AS VARCHAR), f.value_text) AS value_mid,
@@ -277,7 +282,6 @@ FROM template AS t JOIN gold.analysis_run AS r ON r.run_id = getvariable('gold_r
 LEFT JOIN totals AS b USING (parameter)
 LEFT JOIN gold.factor AS f ON f.submission_parameter = t.parameter AND f.run_id = r.run_id
     AND t.must_or_bonus = 'Must' AND t.seq > 4
-    AND (t.seq NOT BETWEEN 5 AND 7 OR r.emissions_basis = 'CO2')
 ORDER BY t.seq;
 
 -- Q15. Prepare one official measures CSV row per selected package member.
@@ -293,10 +297,11 @@ WITH evidence_summary AS (
 SELECT m.measure_id, m.description, s.subject_name AS resource_or_source, m.proposed_change AS change,
        m.effort_person_days, pm.credited_cost_chf AS savings_cost_chf_per_year,
        pm.credited_energy_kwh AS savings_energy_kwh_per_year,
-       CASE WHEN r.emissions_basis = 'CO2' THEN pm.credited_location_kg END AS savings_co2_kg_location_based,
-       NULL::DECIMAL(28, 12) AS savings_co2_kg_market_based, m.risks_and_exceptions,
+       pm.credited_location_kg AS savings_co2_kg_location_based,
+       NULL::DECIMAL(28, 12) AS savings_co2_kg_market_based,
+       concat_ws(' | ', m.risks_and_exceptions, 'Responsible owner: ' || m.responsible_role) AS risks_and_exceptions,
        concat_ws(' | ', 'Run ' || pm.run_id, 'Package ' || pm.package_id, pm.horizon, pm.scenario,
-                 p.evaluation_status, 'Effective from ' || m.earliest_effective_date,
+                 p.evaluation_status, 'Location savings in kg ' || r.emissions_basis, 'Effective from ' || m.earliest_effective_date,
                  'Contribution evidence ' || pm.evidence_set_id, 'Decision evidence ' || m.evidence_set_id,
                  'One-time cash CHF ' || m.one_time_cash_chf, pm.allocation_note,
                  ce.calculation_sources, de.calculation_sources) AS assumptions_and_sources

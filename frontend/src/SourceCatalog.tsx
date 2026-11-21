@@ -3,7 +3,7 @@ import type { QualityOverview } from './api/quality';
 import { formatCount } from './numberFormat';
 
 type SourceDescription = {
-  file: `${string}.csv`;
+  file: `${string}.csv` | `${string}.jsonl`;
   row: string;
   relevance: string;
 };
@@ -24,19 +24,48 @@ const sourceCatalog = [
   { file: 'business_calendar.csv', row: 'A calendar day with workday and holiday information.', relevance: 'Helps identify when work schedules and holidays may restrict changes.' },
 ] as const satisfies readonly SourceDescription[];
 
+const additivityLabels = {
+  additive_total: 'Totals that add over time',
+  mixed: 'Totals and levels in one row',
+  period_level: 'Period level, not a total',
+  point_in_time: 'Point-in-time inventory',
+  reference: 'Reference data',
+} as const;
+
+type Summary = QualityOverview['sources'][number];
+
+function Grain({ profile }: { profile: Summary }) {
+  const period = profile.date_coverage;
+  return <dl className="catalog-findings catalog-grain">
+    {profile.grain ? <div><dt>One row is</dt><dd>{profile.grain}</dd></div> : null}
+    <div><dt>Reporting period</dt>
+      <dd>{period ? `${period.minimum} to ${period.maximum}` : 'No time series'}</dd></div>
+    {profile.additivity ? <div><dt>Adding over time</dt>
+      <dd>{additivityLabels[profile.additivity]}. {profile.additivity_note}</dd></div> : null}
+  </dl>;
+}
+
 export function SourceCatalog({ sources }: { sources: QualityOverview['sources'] }) {
   const profiles = new Map(sources.map(source => [source.name, source]));
+  const listed = new Set<string>(sourceCatalog.map(source => source.file));
+  const supplemental = sources.filter(source => !listed.has(source.name)).map(source => ({
+    file: source.name,
+    row: source.role,
+    relevance: '',
+  }));
   return (
     <section id="catalog" aria-label="Source catalog">
       <ul className="layer-catalog">
-        {sourceCatalog.map(({ file, row, relevance }) => {
+        {[...sourceCatalog, ...supplemental].map(({ file, row, relevance }) => {
           const profile = profiles.get(file);
           const issues = Object.entries(profile?.issue_counts ?? {});
           return (
             <CatalogRow key={file} name={file}
               records={profile ? `${formatCount(profile.rows)} records` : 'Count unavailable'}
               findings={profile ? (issues.length ? `${issues.length} issue types` : 'No issues flagged') : 'Issues unavailable'}>
-              <p>{row} {relevance}</p>
+              <p>{row}{relevance ? ` ${relevance}` : '.'}</p>
+              {profile ? <Grain profile={profile} /> : null}
+              {supplemental.length > 0 && <p><a href={`/api/v1/data-quality/sources/${encodeURIComponent(file)}/raw`}>Download raw source</a></p>}
               <h3>Issues found</h3>
               {issues.length ? <dl className="catalog-findings">
                 {issues.map(([category, count]) => <div key={category}>

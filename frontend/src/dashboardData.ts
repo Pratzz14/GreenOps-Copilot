@@ -5,7 +5,7 @@ export type GoldModels = components['schemas'];
 export type Scenario = GoldModels['GoldScore']['scenario'];
 export type Breakdown = GoldModels['GoldBreakdown'];
 export type Metric = 'carbon' | 'energy' | 'cost';
-export type Group = 'tool' | 'department' | 'provider' | 'location';
+export type Group = 'tool' | 'platform' | 'department' | 'provider' | 'location';
 export type CarbonUnit = 't CO₂' | 't CO₂e';
 
 export const number = numberFormat;
@@ -14,9 +14,10 @@ const monthAndYear = new Intl.DateTimeFormat('en-GB', { month: 'short', year: 'n
 export const dateLabel = new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone: 'UTC' });
 export const percent = new Intl.NumberFormat(numberLocale, { style: 'percent', maximumFractionDigits: 1 });
 
-export const operatingEmissionsUnit: CarbonUnit = 't CO₂e';
-export const metricLabels: Record<Metric, string> = { carbon: 'CO₂e', energy: 'Energy', cost: 'Spending' };
-export const groupLabels: Record<Group, string> = { tool: 'Tool', department: 'Department', provider: 'Provider', location: 'Location' };
+export const metricLabels: Record<Metric, string> = { carbon: 'Emissions', energy: 'Energy', cost: 'Spending' };
+export const groupLabels: Record<Group, string> = {
+  tool: 'Tool', platform: 'Platform', provider: 'Provider', location: 'Location', department: 'Department',
+};
 export const coverageLabels = { complete: 'Complete coverage', partial: 'Partial coverage', unknown: 'Coverage unknown' };
 export const dashboardDefaults = {
   scenario: 'mid' as Scenario,
@@ -48,6 +49,10 @@ export function carbonUnit(basis: string | undefined): CarbonUnit {
   return basis === 'CO2e' || basis === 'kg_CO2e' ? 't CO₂e' : 't CO₂';
 }
 
+export function emissionsUnit(overview: GoldModels['GoldOverview'] | undefined): CarbonUnit {
+  return overview ? 't CO₂e' : carbonUnit(undefined);
+}
+
 export function metricUnit(metric: Metric, emissionsUnit: CarbonUnit) {
   return metric === 'carbon' ? emissionsUnit : metric === 'cost' ? 'CHF' : 'kWh';
 }
@@ -66,7 +71,7 @@ export function sumAvailable(first: string | number | null | undefined, second: 
 }
 
 export function rowValue(row: Breakdown, metric: Metric) {
-  if (metric === 'carbon') return sumAvailable(row.estimated_location_kg, row.swiss_operating_kg_co2e);
+  if (metric === 'carbon') return row.reporting_kg_co2e == null ? null : Number(row.reporting_kg_co2e);
   if (metric === 'cost') return sumAvailable(row.recorded_cost_chf, row.imputed_cost_chf);
   return row.estimated_kwh === null ? null : Number(row.estimated_kwh);
 }
@@ -94,6 +99,13 @@ export function periodBreakdown(rows: Breakdown[], period: string[] | null) {
     const previous = totals.get(row.driver);
     totals.set(row.driver, previous ? {
       ...previous,
+      reporting_kg_co2e: sum(previous.reporting_kg_co2e, row.reporting_kg_co2e),
+      planning_kwh: sum(previous.planning_kwh, row.planning_kwh),
+      planning_kg_co2e: sum(previous.planning_kg_co2e, row.planning_kg_co2e),
+      planning_energy_boundaries: [...new Set([
+        ...(previous.planning_energy_boundaries ?? []), ...(row.planning_energy_boundaries ?? []),
+      ])],
+      needs_energy_factor: previous.needs_energy_factor || row.needs_energy_factor,
       estimated_location_kg: sum(previous.estimated_location_kg, row.estimated_location_kg),
       estimated_kwh: sum(previous.estimated_kwh, row.estimated_kwh),
       recorded_cost_chf: sum(previous.recorded_cost_chf, row.recorded_cost_chf),

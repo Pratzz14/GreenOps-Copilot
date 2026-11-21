@@ -8,14 +8,19 @@ from statistics import mean, median
 from src.profile import END, START, period_sequence
 from src.silver_rules import OPTIONAL, slug
 from src.source_specs import SPECS
+from src.supplemental import source_filename
 
 PROFILE_FIELDS = ('table', 'scope', 'section', 'field', 'label', 'expected_type', 'observed_type',
                   'valid', 'missing', 'not_applicable', 'optional_blank', 'invalid',
                   'bronze_rows', 'bronze_missing', 'matched_bronze_missing', 'silver_rows',
                   'minimum', 'median', 'mean', 'maximum', 'bin', 'count', 'description')
 DECIMALS = {'node_hours', 'uncached_input_tokens', 'amount_original', 'fx_rate', 'converted_cost_chf'}
-INTEGERS = {'source_row', 'weekday_iso', 'utilization_window_days'}
-BOOLEANS = {'baseline_overlap', 'baseline_context', 'baseline_boundary_week', 'baseline_eligible'}
+DECIMALS.update({'expanded_gb', 'storage_gb', 'ingested_gb', 'baseline_storage_gb_days',
+                 'baseline_teams_video_minutes', 'baseline_mails_sent', 'extra_quantity', 'core_quantity', 'difference',
+                 'core_to_extra_ratio', 'retained_gb_days'})
+INTEGERS = {'source_row', 'weekday_iso', 'utilization_window_days', 'restore_test_age_days', 'days_since_last_read'}
+BOOLEANS = {'baseline_overlap', 'baseline_context', 'baseline_boundary_week', 'baseline_eligible',
+            'retention_review_candidate', 'storage_review_candidate'}
 
 
 @lru_cache(maxsize=None)
@@ -25,8 +30,8 @@ def schema(table):
     origins = ('ai_subscriptions', 'saas_contracts') if table == 'contracts' else (table,)
     if table == 'usage_facts':
         origins = ('ai_usage', 'data_platform_usage', 'server_metrics_weekly')
-    return {slug(field): kind for origin in origins if f'{origin}.csv' in SPECS
-            for field, kind in SPECS[f'{origin}.csv'].types.items()}
+    return {slug(field): kind for origin in origins if source_filename(origin) in SPECS
+            for field, kind in SPECS[source_filename(origin)].types.items()}
 
 
 @lru_cache(maxsize=None)
@@ -44,8 +49,12 @@ def field_type(table, field):
 
 
 def measurement_label(row, table, field):
-    if field in {'amount_original', slug(SPECS[f'{table}.csv'].amount)}:
-        return row.get('original_currency') or 'Unknown currency'
+    if field in {'amount_original', slug(SPECS[source_filename(table)].amount)}:
+        return row.get('original_currency') or row.get('currency') or 'Unknown currency'
+    if field == 'storage' and table == 'm365_usage':
+        return row.get('storage_unit') or 'Unknown unit'
+    if field == 'log_gb' and table == 'log_volume':
+        return row.get('unit') or 'Unknown unit'
     if field in {'converted_cost_chf', 'cost_chf'}:
         return 'Converted CHF' if field == 'converted_cost_chf' else 'Reported CHF'
     if field == 'fx_rate':
@@ -67,15 +76,17 @@ def hist(values):
 
 
 def gaps(name, records, scope):
-    spec = SPECS[f'{name}.csv']
+    spec = SPECS[source_filename(name)]
     observed = defaultdict(set)
-    if spec.cadence not in {'monthly', 'daily', 'weekly'}:
+    if spec.cadence not in {'monthly', 'daily', 'weekly', 'hourly'}:
         return
     for record in records:
         row = record.row
         if not row.get('event_date'):
             continue
         cadence = row.get('observation_cadence') or spec.cadence
+        if cadence == 'hourly':
+            cadence = 'daily'  # An hourly source is checked for whole missing Zurich days.
         entity = tuple(str(row.get(slug(field)) or '?') for field in spec.entity.split())
         if name == 'data_platform_usage':
             entity += (row.get('cluster') or '?',)
@@ -105,7 +116,7 @@ def blank(value):
 def profiles(tables):
     result, issues = [], []
     for name, records in tables.items():
-        spec = SPECS[f'{name}.csv']
+        spec = SPECS[source_filename(name)]
         columns = {slug(field): field for field in spec.types}
         fields = list(dict.fromkeys([*columns, *(key for record in records for key in record.row)]))
         for scope in ('full', 'baseline'):
@@ -122,7 +133,7 @@ def profiles(tables):
             for gap in gaps(name, accepted, scope):
                 result.append(dict(**base, section='gap', **gap))
                 if scope == 'baseline':
-                    issues.append(dict(source_file=f'{name}.csv', field=spec.date, code='observation_gaps',
+                    issues.append(dict(source_file=source_filename(name), field=spec.date, code='observation_gaps',
                                        reason=f"{gap['label']}: {gap['description']}", impact='Observation coverage',
                                        next_investigation='Check the source export for missing observations.'))
             for field in fields:

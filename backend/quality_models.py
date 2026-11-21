@@ -187,6 +187,9 @@ class SourceSummary(Contract):
     issue_counts: dict[str,int]
     date_coverage: Coverage | None
     gap_count: int
+    grain: str | None = None
+    additivity: Literal['additive_total', 'mixed', 'period_level', 'point_in_time', 'reference'] | None = None
+    additivity_note: str | None = None
 
 class QualityOverview(Contract):
     report_id: str

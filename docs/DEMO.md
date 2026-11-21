@@ -46,8 +46,9 @@ the combined local app and open the **Gold** tab in **Data Explorer**. Expand
 any table to show its schema and records, then open **Detailed overview**.
 
 1. Show the annual baseline, coverage, and spend and emissions by department.
-   Change the group to **Location**. Explain the separately reported Swiss
-   operating CO₂e estimate and the scorecard's direct CO₂ basis.
+   Change the group to **Location**. Open the emissions information panel to
+   explain that the total includes Swiss operating CO₂e, while the scorecard
+   stays on direct CO₂. Open **Coverage by workload** to show a listed gap.
 2. Show the `dp-dev` finding and open **View evidence**. Compare time running
    with active time and call out the observation gap. The August AI seat
    findings provide a second example with priced inactivity by product.

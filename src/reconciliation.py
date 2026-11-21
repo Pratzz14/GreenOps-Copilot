@@ -9,7 +9,7 @@ from pathlib import Path
 from src.ingest import ROOT
 from src.profile import END, START, read_csv
 from src.silver_storage import (FINANCIAL, REPORTS, TABLES, atomic_csv, manifest,
-                                pointer, silver_directory, validate, write_csv)
+                                pointer, published_tables, silver_directory, validate, write_csv)
 
 FILES = (*TABLES, *REPORTS, *FINANCIAL)
 RECON_FIELDS = ('dimension', 'group', 'record_count', 'included', 'missing_amount', 'missing_fx',
@@ -57,10 +57,12 @@ def reconcile(facts):
     return [total, *rows]
 
 
-def publish(out):
+def publish(out, *, consume_staging=False):
     version = pointer(out, 'pending')
     source = out / '.silver-staging' / version
-    snapshot, rules = validate(source, version, (*TABLES, *REPORTS))
+    tables = published_tables(source)
+    artifacts = (*tables, *REPORTS, *FINANCIAL)
+    snapshot, rules = validate(source, version, (*tables, *REPORTS))
     _, facts = read_csv(source / 'cost_facts.csv')
     rows = reconcile(facts)
     total = rows[0]
@@ -72,13 +74,16 @@ def publish(out):
     destination = root / version
     with tempfile.TemporaryDirectory(dir=root) as temp:
         directory = Path(temp) / version
-        shutil.copytree(source, directory)
+        if consume_staging:
+            source.rename(directory)
+        else:
+            shutil.copytree(source, directory)
         write_csv(directory / 'reconciliation_report.csv', rows, RECON_FIELDS)
         write_csv(directory / 'cost_baseline.csv', baseline)
-        manifest(directory, version, snapshot, rules, FILES)
-        validate(directory, version, FILES)
+        manifest(directory, version, snapshot, rules, artifacts)
+        validate(directory, version, artifacts)
         if destination.exists():
-            validate(destination, version, FILES)
+            validate(destination, version, artifacts)
             if (directory / 'manifest.csv').read_bytes() != (destination / 'manifest.csv').read_bytes():
                 raise ValueError('Published version differs from the staged reconciliation')
         else:

@@ -57,7 +57,7 @@ def test_budget_search_keeps_lower_ranked_independent_seat_measures():
 def test_environmental_units_and_protection_boundaries():
     assert estimate(D(1000), "tokens", "Germany", "mid") == (D(".48"), D(".1584"))
     assert estimate(D(10), "node", "Germany", "mid") == (D("4.725"), D("1.55925"))
-    assert estimate(D(10), "node", "Switzerland", "mid") == (D("4.725"), None)
+    assert estimate(D(10), "node", "Switzerland", "mid") == (D("4.725"), D(".231525"))
     assert estimate(D(10), None, "Germany", "mid") == (None, None)
     assert training_day(date(2027, 1, 3)) and not training_day(date(2027, 1, 4))
     begins = local_at(date(2027, 1, 1))
@@ -149,9 +149,13 @@ def test_published_run_queries_exports_and_stale_pointer(build_small):
         for filename, official in TEMPLATES.items():
             response = client.get(f"/api/v1/packages/{run_id}/exports/{filename}")
             assert response.status_code == 200
-            header, *_ = list(csv.reader(response.text.splitlines()))
+            header, *_ = list(csv.reader(response.content.decode("utf-8-sig").splitlines()))
             assert header == read_csv(official)[0]
             assert "draft-" in response.headers["content-disposition"]
+            submission = client.get(f"/api/v1/submissions/{run_id}/{filename}")
+            assert submission.status_code == 200
+            assert submission.content.startswith(b"\xef\xbb\xbf")
+            assert official.name in submission.headers["content-disposition"]
         assert client.get("/api/v1/runs/unknown/overview").status_code == 404
         assert client.get(base + "/evidence/unknown").status_code == 404
         atomic_csv(out / "current_silver.csv", [{"version": "a" * 64}])
