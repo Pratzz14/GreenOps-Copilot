@@ -317,19 +317,87 @@
   .dashboard-recommendation > summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .dashboard-recommendation > summary > span:first-child { grid-column: 1 / -1; }
 }
-.dashboard-utilization-header { display: flex; justify-content: space-between; align-items: start; gap: 1rem; flex-wrap: wrap; }
-.dashboard-utilization-header p { margin-top: .25rem; }
-.dashboard-utilization-header label { display: grid; gap: .3rem; font-size: .85rem; }
-.dashboard-utilization-header input { border: 1px solid #b9cabd; border-radius: 6px; padding: .45rem .65rem; }
-.dashboard-utilization-row { border-top: 1px solid #dce4da; }
-.dashboard-utilization-row > summary { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); gap: .75rem; padding: .8rem; cursor: pointer; }
-.dashboard-utilization-row > summary small { display: block; color: #48604f; }
-.dashboard-utilization-row > summary strong::before { content: '▸ '; }
-.dashboard-utilization-row[open] > summary strong::before { content: '▾ '; }
-.dashboard-utilization-evidence { padding: .15rem .8rem .85rem; background: #f5f8f4; overflow-wrap: anywhere; }
-.utilization-impact { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; }
-@media (max-width: 700px) {
-  .dashboard-utilization-row > summary { grid-template-columns: minmax(0, 1fr); }
+.dashboard-panel.dashboard-utilization { padding: 0; }
+.dashboard-utilization-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 16px 24px;
+  flex-wrap: wrap;
+  padding: 20px 24px;
 }
-.dashboard-utilization-controls { display: flex; flex-wrap: wrap; gap: .75rem; }
-.dashboard-utilization-controls select { border: 1px solid #b9cabd; border-radius: 6px; padding: .45rem .65rem; background: white; }
+.dashboard-utilization-header h2 { font-size: clamp(20px, 1.7vw, 27px); }
+.dashboard-utilization-header p { margin-top: 4px; color: var(--dashboard-secondary); }
+.dashboard-utilization-header .dashboard-utilization-count { margin-top: 6px; }
+.dashboard-utilization-controls { display: flex; flex-wrap: wrap; gap: 12px; }
+.dashboard-utilization-controls label { font-size: 12px; color: var(--dashboard-secondary); }
+.dashboard-utilization-controls input, .dashboard-utilization-controls select {
+  height: 36px;
+  border-color: #b6c9ba;
+  font-size: 13px;
+}
+.dashboard-utilization-table { table-layout: fixed; font-size: 14px; }
+.dashboard-utilization-table :is(th, td) { padding: 12px 18px; border-bottom: 1px solid var(--dashboard-border); }
+.dashboard-utilization-table thead th { color: #2d4a37; background: #eaf0e8; font-size: 12px; }
+.dashboard-utilization-table thead th:first-child { width: 28%; padding-inline-start: 24px; }
+.dashboard-utilization-table thead th:nth-child(2) { width: 30%; }
+.dashboard-utilization-table thead th[aria-sort] { background: #dce8da; }
+.dashboard-utilization-table thead svg { vertical-align: middle; margin-inline-start: 4px; }
+.dashboard-utilization-row > th { padding: 6px 12px; white-space: normal; }
+.dashboard-utilization-resource {
+  display: flex;
+  align-items: start;
+  gap: 6px;
+  padding: 6px;
+  max-width: 100%;
+  border: 0;
+  color: #213d32;
+  text-align: left;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.dashboard-utilization-resource svg { flex: none; margin-top: 2px; }
+.dashboard-utilization-resource[aria-expanded="true"] svg { transform: rotate(90deg); }
+.dashboard-utilization-resource small { display: block; color: var(--dashboard-secondary); font-size: 12px; font-weight: 400; }
+.dashboard-utilization-observation { color: var(--dashboard-secondary); overflow-wrap: anywhere; }
+.dashboard-utilization-table .dashboard-utilization-impact { text-align: right; font-variant-numeric: tabular-nums; }
+.dashboard-utilization-impact[data-active="true"] { font-weight: 700; }
+.dashboard-utilization-impact[data-unavailable="true"] { color: #5c6c61; font-weight: 400; }
+.dashboard-utilization-mobile-label { display: none; }
+.dashboard-utilization-evidence td { padding-inline: 40px 24px; background: #f5f8f4; overflow-wrap: anywhere; }
+.dashboard-utilization-evidence details { margin-top: 6px; }
+.dashboard-utilization-evidence summary { width: fit-content; cursor: pointer; }
+.dashboard-utilization .dashboard-utilization-empty { padding: 4px 24px 20px; }
+.dashboard-utilization .pagination { gap: 8px; margin: 0; padding: 14px 24px; font-size: 12px; color: var(--dashboard-secondary); }
+.dashboard-utilization .pagination span { order: -1; margin-inline-end: auto; font-variant-numeric: tabular-nums; }
+.dashboard-utilization .pagination button:last-child:not(:disabled) { color: white; background: #28583d; border-color: #28583d; }
+.dashboard-utilization .pagination button:last-child:not(:disabled):hover { background: #214a33; }
+@media (max-width: 740px) {
+  .dashboard-utilization-header { padding: 16px; }
+  .dashboard-utilization-controls { display: grid; grid-template-columns: minmax(0, 1fr) minmax(186px, 1.2fr); width: 100%; }
+  .dashboard-utilization-table, .dashboard-utilization-table tbody { display: block; }
+  .dashboard-utilization-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .dashboard-utilization-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px 10px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--dashboard-border);
+  }
+  .dashboard-utilization-table :is(.dashboard-utilization-row th, .dashboard-utilization-row td) {
+    padding: 0;
+    border: 0;
+    text-align: left;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+  }
+  .dashboard-utilization-row > th, .dashboard-utilization-observation { grid-column: 1 / -1; }
+  .dashboard-utilization-resource { margin-inline-start: -5px; padding: 2px 5px; }
+  .dashboard-utilization-observation { margin-bottom: 4px; }
+  .dashboard-utilization-mobile-label { display: block; color: var(--dashboard-secondary); font-size: 11px; font-weight: 500; }
+  .dashboard-utilization-evidence:not([hidden]), .dashboard-utilization-evidence td { display: block; }
+  .dashboard-utilization-evidence td, .dashboard-utilization .pagination { padding-inline: 16px; }
+}
+@media (max-width: 360px) {
+  .dashboard-utilization-controls { grid-template-columns: minmax(0, 1fr); }
+}

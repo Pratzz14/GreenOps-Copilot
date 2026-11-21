@@ -66,7 +66,9 @@ async function verifyDashboard(browser, viewport) {
   const scan = await (await page.request.get(url + `/api/v1/runs/${currentRun.run_id}/utilization?include_estimates=true`)).json();
   const rankedResources = scan.items
     .map(row => ({ name: row.resource, cost: Number(row.impact.cost ?? -Infinity) })).sort(sortByCost);
-  const resourceNames = utilization.locator('.dashboard-utilization-row summary strong');
+  const utilizationTable = utilization.getByRole('table', { name: 'Resource utilization and impact' });
+  await expect(utilizationTable.getByRole('columnheader', { name: 'Spending' })).toHaveAttribute('aria-sort', 'descending');
+  const resourceNames = utilizationTable.locator('.dashboard-utilization-resource strong');
   await expect(resourceNames).toHaveText(rankedResources.slice(0, 5).map(row => row.name));
   await expect(utilization.getByText(/Assess resizing or scheduled pauses|Review reducing seats at renewal/)).toHaveCount(0);
   const resourcePages = utilization.getByRole('group', { name: 'Resource pages' });
@@ -205,10 +207,15 @@ async function verifyDashboard(browser, viewport) {
   await search.fill('dp-dev');
   const cluster = utilization.locator('.dashboard-utilization-row');
   await expect(cluster).toHaveCount(1);
-  await cluster.locator(':scope > summary').click();
-  await expect(cluster).toContainText('at most 20% active');
-  await cluster.getByText('Source rows', { exact: true }).click();
-  await expect(cluster).toContainText('data_platform_usage.csv');
+  const resourceButton = cluster.getByRole('button', { name: /dp-dev/ });
+  await resourceButton.press('Enter');
+  await expect(resourceButton).toHaveAttribute('aria-expanded', 'true');
+  const evidence = utilization.locator('.dashboard-utilization-evidence');
+  await expect(evidence).toContainText('at most 20% active');
+  await evidence.getByText('Source rows', { exact: true }).click();
+  await expect(evidence.getByText(/data_platform_usage.csv/)).toBeVisible();
+  await resourceButton.click();
+  await expect(evidence).toBeHidden();
   await search.fill('nonexistent-resource');
   await expect(utilization).toContainText('No resources match your search.');
   const files = [
