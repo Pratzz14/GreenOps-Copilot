@@ -3,7 +3,7 @@
 from collections import defaultdict
 from datetime import date, timedelta
 
-from src.gold_baseline import GoldData, accepted, decimal
+from src.gold_baseline import GoldData, accepted, decimal, subtotal
 from src.gold_measures import compute_estimates, first_year_fraction
 from src.recommendations import seat_gap
 from src.silver_storage import silver_directory
@@ -26,17 +26,20 @@ def licence_spend(history, months, persistent_unused, decision):
     latest = observation(max(history))
     annual = latest["unit_chf"] * persistent_unused * 12 if latest["unit_chf"] is not None else None
     terms = {(row["contract_end"], row["notice_period_days"]) for row in history.values()}
-    effective = None
+    effective = deadline = None
     if len(terms) == 1:
         end, notice_days = next(iter(terms))
         if end and notice_days:
             end = date.fromisoformat(end)
-            if end - timedelta(days=int(notice_days)) >= decision:
+            deadline = end - timedelta(days=int(notice_days))
+            if deadline >= decision:
                 effective = end + timedelta(days=1)
     fraction = first_year_fraction(decision, effective)
     return [observation(month) for month in months], {
         "annual": annual, "first_year": annual * fraction if annual is not None and fraction is not None else None,
         "price_month": latest["month"], "unit_chf": latest["unit_chf"], "effective_date": effective,
+        "purchased_seats": int(history[latest["month"]]["licences_purchased"]),
+        "notice_deadline": deadline,
         "reason": latest["reason"],
     }
 
@@ -53,7 +56,7 @@ def development_spend(gold, output, months, scenario):
     usage, costs = by_table
     for month in months:
         if not usage[month]:
-            yield {"month": month, "amount": None, "reason": "No runtime evidence for this month"}
+            yield {"month": month, "amount": None, "reason": "No runtime evidence for this month"}, None
             continue
         values = compute_estimates(data, usage[month], costs[month], (16, 12, 8), "node", reserve_active=True)
         amount = values[scenario].gross
@@ -63,11 +66,17 @@ def development_spend(gold, output, months, scenario):
             if rows:
                 sources.append({"file": rows[0]["source_file"],
                                 "rows": sorted({int(row["source_row"]) for row in rows})})
+        usage_days = {row["event_date"] for row in usage[month]}
+        matched = {row["event_date"]: row for row in costs[month] if row["event_date"] in usage_days}
+        charges = [data.finances[row["record_id"]] for row in matched.values()
+                   if (decimal(row["quantity"]) or 0) > 0]
+        billed = subtotal(decimal(charge["cost_chf"]) for charge in charges
+                         if charge["financial_status"] == "included")
         yield {"month": month, "amount": amount,
                "reason": None if amount is not None else "No matched variable charges for this month",
                "calculation": f"Reprice avoidable node-hours on matched billing days. Retain at least {retained} hours, "
                               "active time plus startup allowance, and all protected training hours.",
-               "sources": sources}
+               "sources": sources}, billed
 
 
 def metric_gaps(member):

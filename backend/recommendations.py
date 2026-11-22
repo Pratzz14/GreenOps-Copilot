@@ -8,6 +8,7 @@ from pathlib import Path
 from fastapi import HTTPException
 
 from backend.gold import open_published_gold
+from backend.recommendation_forecast import historical_months, spending_projection
 from backend.recommendation_savings import development_spend, licence_spend, metric_gaps
 from backend.recommendation_tags import cached_tag, enrich, final_status, read_tags
 from src.gold import current_run
@@ -16,7 +17,7 @@ from src.platforms import subject_platform, subject_platforms
 from src.recommendations import catalog
 
 
-def list_recommendations(gold, output, months, scenario, group, driver, *, grouped=False):
+def list_recommendations(gold, output, months, scenario, group, driver, *, grouped=False, projection_months=()):
     start, stop = gold.run["baseline_start"], gold.run["baseline_end_exclusive"]
     if any(len(month) != 7 or month[4] != "-" or not (month[:4] + month[5:]).isdigit()
            or not 1 <= int(month[5:]) <= 12 or not start.isoformat()[:7] <= month <= stop.isoformat()[:7]
@@ -52,32 +53,43 @@ def list_recommendations(gold, output, months, scenario, group, driver, *, group
                   if key not in {"evidence", "attribution", "billing_subject", "decision_as_of", "action", "seat_history"}}
         if grouped:
             periods = sorted(selected) if selected else sorted(display_months | {last_month})
+            pricing_periods = sorted(set(periods).union(projection_months))
             breakdown, annual = [], None
+            projection_history = {}
             if item["seat_history"]:
-                breakdown, annual = licence_spend(item["seat_history"], periods, item["persistent_unused"], gold.run["decision_as_of"])
+                observations, annual = licence_spend(item["seat_history"], pricing_periods, item["persistent_unused"], gold.run["decision_as_of"])
+                breakdown = [period for period in observations if period["month"] in periods]
+                for period in observations:
+                    if period["month"] in projection_months and period.get("unit_chf") is not None:
+                        seats = item["seat_history"][period["month"]]["licences_purchased"]
+                        projection_history[period["month"]] = int(seats) * period["unit_chf"]
             elif item["estimate"] and item["estimate"]["measure_id"] == "schedule-development":
                 if development is None:
-                    development = list(development_spend(gold, output, periods, scenario))
-                breakdown = development
+                    development = list(development_spend(gold, output, pricing_periods, scenario))
+                breakdown = [period for period, _ in development if period["month"] in periods]
+                projection_history = {period["month"]: billed for period, billed in development}
             else:
                 reason = ("Blocked by a protection rule" if item["safety_status"] == "blocked"
                           else "No priced runtime reduction modeled" if item["billing_subject"]
                           else "No verified billing link")
                 breakdown = [{"month": month, "amount": None, "reason": reason} for month in periods]
-            member.update(monthly_spend=breakdown, licence_spend=annual)
+            member.update(monthly_spend=breakdown, licence_spend=annual, projection_history=projection_history)
             member["metric_gaps"] = metric_gaps(member)
         yield (scope, item["action"], member) if grouped else member
 
 
 def group_recommendations(gold, output, months, scenario, group, driver):
     groups = defaultdict(list)
-    for scope, action, member in list_recommendations(gold, output, months, scenario, group, driver, grouped=True):
+    start, stop = gold.run["baseline_start"], gold.run["baseline_end_exclusive"]
+    history = historical_months(start, stop)
+    for scope, action, member in list_recommendations(gold, output, months, scenario, group, driver,
+                                                      grouped=True, projection_months=history):
         groups[scope, action].append(member)
     display_month = max(months) if months else (gold.run["baseline_end_exclusive"] - timedelta(days=1)).isoformat()[:7]
     return summarize_groups(groups, group, gold.select("""
         SELECT measure_id, related_measure_id FROM gold.measure_constraint
         WHERE run_id=? AND constraint_type IN ('overlaps', 'excludes')
-    """), display_month)
+    """), display_month, projection_period=(history, stop.replace(day=1), gold.run["decision_as_of"]))
 
 
 def metric_total(values):
@@ -92,7 +104,7 @@ def estimate_id(member):
     return member["id"] if member.get("licence_spend") else None
 
 
-def summarize_groups(groups, dimension, constraints, display_month=""):
+def summarize_groups(groups, dimension, constraints, display_month="", *, projection_period=None):
     available = {member["estimate"]["measure_id"] for members in groups.values() for member in members
                  if member["estimate"] and member["safety_status"] != "blocked"}
     conflicts = set()
@@ -147,13 +159,18 @@ def summarize_groups(groups, dimension, constraints, display_month=""):
                         if estimate[key] is not None:
                             values[status].append(estimate[key])
             savings[horizon] = {key: metric_total(values) for key, values in metrics.items()}
-        yield {"id": key_for(dimension, scope, action), "scope": scope, "action": action, "members": members,
+        projection = spending_projection(
+            (member for measure_id, member in measures.items() if measure_id not in conflicts),
+            len(members), *projection_period,
+        ) if projection_period else None
+        public_members = [{key: value for key, value in member.items() if key != "projection_history"} for member in members]
+        yield {"id": key_for(dimension, scope, action), "scope": scope, "action": action, "members": public_members,
                "persistent_unused": sum(seats) if seats else None,
                "cost_center_count": len({member.get("cost_center") for member in members} - {None}),
                "safety_counts": dict(counts), "savings": savings,
                "monthly_spend": {month: metric_total(values) for month, values in sorted(monthly.items())},
                "display_month": display_month,
-               "omitted_measure_count": len(measures.keys() & conflicts)}
+               "omitted_measure_count": len(measures.keys() & conflicts), "spending_projection": projection}
 
 
 def platform_breakdowns(gold, output, scenario):

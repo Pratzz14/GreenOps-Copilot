@@ -4,6 +4,7 @@ import { useGold } from './api/gold';
 import DashboardRequest from './DashboardRequest';
 import DashboardPagination from './DashboardPagination';
 import { Evidence } from './GoldEvidence';
+import RecommendationImpact from './RecommendationImpact';
 import { carbonUnit, groupLabels, metricValue, monthLabel, dateLabel, sumAvailable, type GoldModels, type Group, type Metric } from './dashboardData';
 import {
   displaySavings, fields, groupSavings, labels, memberSavings, recommendationActions, spending, statuses, type Recommendation, type RecommendationGroup,
@@ -157,6 +158,7 @@ export function RecommendationRow({ row, run, basis, metric, selected, month, sc
     </tr>
     <tr className="dashboard-recommendation-expansion" id={detailsId} hidden={!open}><td colSpan={4}>
       {open && <div className="dashboard-recommendation-evidence">
+        <RecommendationImpact row={row} />
         <p><strong>{owners.join(' · ')}</strong>{row.action === 'resize' && <> · Confirm minimum seats and renewal terms.</>}</p>
         {row.persistent_unused !== null && <p>The annual estimate uses {row.persistent_unused} persistently unused seats.</p>}
         {row.omitted_measure_count > 0 && <p>{row.omitted_measure_count} overlapping or shared estimates require individual review.</p>}

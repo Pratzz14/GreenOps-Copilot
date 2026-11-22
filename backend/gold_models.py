@@ -226,6 +226,8 @@ class LicenceRecommendationSpend(Contract):
     price_month: str
     unit_chf: Decimal | None
     effective_date: date | None
+    purchased_seats: int | None = None
+    notice_deadline: date | None = None
     reason: str | None
 
 
@@ -233,6 +235,27 @@ class GroupedRecommendationMember(GoldRecommendation):
     monthly_spend: list[MonthlyRecommendationSpend]
     licence_spend: LicenceRecommendationSpend | None
     metric_gaps: dict[str, str | None]
+
+
+class PublishedSpendingMonth(Contract):
+    month: str
+    published_chf: Decimal
+
+
+class ProjectedSpendingMonth(Contract):
+    month: str
+    current_chf: Decimal
+    if_followed_chf: Decimal
+
+
+class RecommendationSpendingProjection(Contract):
+    history: list[PublishedSpendingMonth]
+    forecast: list[ProjectedSpendingMonth]
+    savings_chf: Decimal
+    effective_dates: list[date]
+    covered_scopes: int
+    total_scopes: int
+    conditional: bool
 
 
 class RecommendationGroup(Contract):
@@ -247,6 +270,7 @@ class RecommendationGroup(Contract):
     omitted_measure_count: int
     monthly_spend: dict[str, RecommendationTotals]
     display_month: str
+    spending_projection: RecommendationSpendingProjection | None = None
 
 
 class GoldMember(Contract):

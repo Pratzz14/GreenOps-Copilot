@@ -37,7 +37,13 @@ function PeriodPicker({ months, period, onChange }: {
         <span id="dashboard-period-selection">{period === null ? 'All months' :
           selected.length === 1 ? monthLabel(selected[0]) : `${selected.length} months selected`}</span>
       </summary>
-      <fieldset className="dashboard-period-options" aria-labelledby="dashboard-period-label">
+      <fieldset className="dashboard-period-options" aria-labelledby="dashboard-period-label" onMouseDown={event => {
+        const target = event.target;
+        // Keep focus inside until the label forwards the click to its checkbox.
+        if (target instanceof Element && !target.matches('input') && target.closest('label')) {
+          event.preventDefault();
+        }
+      }}>
         <label><input type="checkbox" checked={period === null}
           onChange={event => onChange(event.target.checked ? null : [])} />All months</label>
         {months.map(month => <label key={month}><input type="checkbox" checked={selected.includes(month)}

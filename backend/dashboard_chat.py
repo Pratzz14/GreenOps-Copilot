@@ -9,9 +9,10 @@ from urllib.parse import urlencode
 
 import duckdb
 import httpx
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
+from backend import dashboard_voice
 from backend.analysis import Scope
 from backend.analysis_ai import configured, settings
 from backend.analysis_data import availability, prepare
@@ -115,6 +116,7 @@ class Reply(BaseModel):
 
 class ChatStatus(BaseModel):
     configured: bool
+    voice_configured: bool
 
 
 def model_json(instructions, payload):
@@ -326,7 +328,13 @@ def execute_query(request, gold, query, defaults):
 
 @router.get("/status", response_model=ChatStatus)
 def status():
-    return {"configured": configured()}
+    return {"configured": configured(), "voice_configured": dashboard_voice.voice_configured()}
+
+
+router.add_api_route("/transcribe", dashboard_voice.transcribe, methods=["POST"],
+                     response_model=dashboard_voice.Transcript, openapi_extra=dashboard_voice.WAV_REQUEST)
+router.add_api_route("/speech", dashboard_voice.speech, methods=["POST"],
+                     response_class=Response, responses=dashboard_voice.SPEECH_RESPONSE)
 
 
 @router.post("", response_model=Reply)

@@ -686,6 +686,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dashboard/chat/transcribe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Transcribe */
+        post: operations["transcribe_api_v1_dashboard_chat_transcribe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/dashboard/chat/speech": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Speech */
+        post: operations["speech_api_v1_dashboard_chat_speech_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dashboard/chat": {
         parameters: {
             query?: never;
@@ -797,6 +831,8 @@ export interface components {
         ChatStatus: {
             /** Configured */
             configured: boolean;
+            /** Voice Configured */
+            voice_configured: boolean;
         };
         /** ColumnProfile */
         ColumnProfile: {
@@ -1738,6 +1774,10 @@ export interface components {
             unit_chf: string | null;
             /** Effective Date */
             effective_date: string | null;
+            /** Purchased Seats */
+            purchased_seats?: number | null;
+            /** Notice Deadline */
+            notice_deadline?: string | null;
             /** Reason */
             reason: string | null;
         };
@@ -1877,6 +1917,22 @@ export interface components {
                 [key: string]: number;
             };
         };
+        /** ProjectedSpendingMonth */
+        ProjectedSpendingMonth: {
+            /** Month */
+            month: string;
+            /** Current Chf */
+            current_chf: string;
+            /** If Followed Chf */
+            if_followed_chf: string;
+        };
+        /** PublishedSpendingMonth */
+        PublishedSpendingMonth: {
+            /** Month */
+            month: string;
+            /** Published Chf */
+            published_chf: string;
+        };
         /** QualityIssue */
         QualityIssue: {
             /** Code */
@@ -1958,6 +2014,7 @@ export interface components {
             };
             /** Display Month */
             display_month: string;
+            spending_projection?: components["schemas"]["RecommendationSpendingProjection"] | null;
         };
         /** RecommendationSourceRows */
         RecommendationSourceRows: {
@@ -1965,6 +2022,23 @@ export interface components {
             file: string;
             /** Rows */
             rows: number[];
+        };
+        /** RecommendationSpendingProjection */
+        RecommendationSpendingProjection: {
+            /** History */
+            history: components["schemas"]["PublishedSpendingMonth"][];
+            /** Forecast */
+            forecast: components["schemas"]["ProjectedSpendingMonth"][];
+            /** Savings Chf */
+            savings_chf: string;
+            /** Effective Dates */
+            effective_dates: string[];
+            /** Covered Scopes */
+            covered_scopes: number;
+            /** Total Scopes */
+            total_scopes: number;
+            /** Conditional */
+            conditional: boolean;
         };
         /** RecommendationTotals */
         RecommendationTotals: {
@@ -2216,6 +2290,11 @@ export interface components {
             /** Additivity Note */
             additivity_note?: string | null;
         };
+        /** SpeechRequest */
+        SpeechRequest: {
+            /** Text */
+            text: string;
+        };
         /** Starter */
         Starter: {
             /** Name */
@@ -2276,6 +2355,11 @@ export interface components {
             };
             /** Invalid Rows */
             invalid_rows: number[];
+        };
+        /** Transcript */
+        Transcript: {
+            /** Text */
+            text: string;
         };
         /** ValidationError */
         ValidationError: {
@@ -4063,6 +4147,65 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChatStatus"];
+                };
+            };
+        };
+    };
+    transcribe_api_v1_dashboard_chat_transcribe_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /** @description One mono, 16-bit PCM WAV clip at 16 kHz, up to 30 seconds. */
+                "audio/wav": string;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Transcript"];
+                };
+            };
+        };
+    };
+    speech_api_v1_dashboard_chat_speech_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpeechRequest"];
+            };
+        };
+        responses: {
+            /** @description AI-generated narration. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "audio/mpeg": string;
+                    "audio/wav": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -28,3 +28,4 @@ uvicorn==0.54.0
 duckdb==1.4.4
 sqlglot==30.33.0
 python-dotenv==1.2.1
+websockets==16.0

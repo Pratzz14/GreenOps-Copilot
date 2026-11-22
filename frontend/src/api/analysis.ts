@@ -17,9 +17,13 @@ export type Lineage = Models['Lineage'];
 
 export const analysisBase = '/api/v1/analysis';
 
-export async function readJson<T>(url: string, method = 'GET', data?: unknown): Promise<T> {
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number) { super(message); }
+}
+
+export async function readJson<T>(url: string, method = 'GET', data?: unknown, signal?: AbortSignal): Promise<T> {
   const response = await fetch(url, {
-    method,
+    method, signal,
     ...(data === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
   });
   if (!response.ok) {
@@ -27,7 +31,7 @@ export async function readJson<T>(url: string, method = 'GET', data?: unknown): 
     const detail = body?.detail;
     const message = typeof detail === 'string' ? detail : detail?.message
       ?? (Array.isArray(detail) ? detail.map(item => item.msg).join(' · ') : null);
-    throw new Error(message ?? `Request failed (${response.status})`);
+    throw new ApiError(message ?? `Request failed (${response.status})`, response.status);
   }
   return response.status === 204 ? undefined as T : response.json() as Promise<T>;
 }

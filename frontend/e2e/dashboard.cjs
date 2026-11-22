@@ -2,6 +2,7 @@
 const { chromium, expect: playwrightExpect } = require('@playwright/test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
+const { verifyConversation, verifyRecovery } = require('./dashboard-voice.cjs');
 
 const url = process.env.EDA_URL || 'http://127.0.0.1:8001';
 const expect = playwrightExpect.configure({ timeout: 15000 });
@@ -174,6 +175,10 @@ async function verifyDashboard(browser, viewport, chatOnly = false) {
   assert.ok(!requests.some(request => request.endsWith(`/recommendations/${developmentRecommendation.id}/evidence`)));
   await schedule.getByRole('button').click();
   const expansion = recommendations.locator('tr.dashboard-recommendation-expansion:visible');
+  const clusterImpact = expansion.getByRole('region', { name: 'Monthly spending comparison' });
+  await expect(clusterImpact).toContainText('Includes savings subject to review');
+  await expect(clusterImpact.getByRole('group', { name: 'Monthly spending chart' })).toBeVisible();
+  await expect(clusterImpact.locator('path.recharts-line-curve')).toHaveCount(3);
   await expansion.getByText('dp-dev', { exact: true }).click();
   await expansion.getByText('Recurrence source rows', { exact: true }).click();
   await expect(expansion.getByRole('listitem').filter({ hasText: /^data_platform_usage\.csv/ })).toBeVisible();
@@ -299,16 +304,17 @@ async function verifyDashboard(browser, viewport, chatOnly = false) {
   await expect(trend.getByRole('img', { name: /Monthly Emissions for Data platform development/i })).toBeVisible();
   const allMonths = page.getByRole('checkbox', { name: 'All months', exact: true });
   const august = page.getByRole('checkbox', { name: 'Aug 2026' });
+  const periodOptions = filters.locator('.dashboard-period-options');
   await period.click();
   await expect(page.locator('.dashboard-period input:checked')).toHaveCount(13);
   await august.uncheck();
   await expect(allMonths).not.toBeChecked();
-  await allMonths.check();
+  await periodOptions.getByText('All months', { exact: true }).click();
   await expect(page.locator('.dashboard-period input:checked')).toHaveCount(13);
   await allMonths.uncheck();
   await expect(recommendations).toContainText('Select at least one month');
   await august.check();
-  await page.getByRole('checkbox', { name: 'Jul 2026' }).check();
+  await periodOptions.getByText('Jul 2026', { exact: true }).click();
   await expect(period).toHaveText('2 months selected');
   await expect(utilization).toContainText('2 months selected');
   await august.press('Escape');
@@ -436,7 +442,9 @@ async function verifyRecommendationSummary(browser, viewport) {
   await page.route(/\/recommendation-groups\?/, async route => {
     const response = await route.fetch();
     const rows = await response.json();
-    const member = rows.find(row => row.scope === 'CRM platform')?.members[0];
+    const crm = rows.find(row => row.scope === 'CRM platform');
+    if (crm) delete crm.spending_projection;
+    const member = crm?.members[0];
     if (member) member.ai_tag = { decision: 'human_review', reason: 'contract', evidence_id: 'fixture', explanation };
     const blocked = rows.flatMap(row => row.members).find(item => item.resource === 'dr-failover');
     if (blocked) delete blocked.safety_reason;
@@ -457,6 +465,25 @@ async function verifyRecommendationSummary(browser, viewport) {
   await search.fill('dr-failover');
   await page.getByRole('button', { name: /dr-failover.*Review server downsizing or pauses/ }).click();
   await expect(page.getByRole('cell', { name: 'The named disaster recovery server must remain running.' })).toBeVisible();
+  await expect(page.getByText('This action is blocked.', { exact: true })).toBeVisible();
+  await search.fill('Accounting software');
+  await page.getByRole('button', { name: /Accounting software.*Reduce unused seats at renewal/ }).click();
+  const comparison = results.getByRole('region', { name: 'Monthly spending comparison' });
+  await expect(comparison).toContainText('Earliest modeled start 1 Apr 2027');
+  await expect(comparison.getByRole('table')).toHaveCount(0);
+  const chart = comparison.getByRole('group', { name: 'Monthly spending chart' });
+  await expect(chart.locator('path.recharts-line-curve')).toHaveCount(3);
+  await chart.getByRole('application').focus();
+  for (let month = 0; month < 16; month++) await page.keyboard.press('ArrowRight');
+  const tooltip = chart.getByRole('status');
+  await expect(tooltip).toContainText('Aug 2027');
+  await expect(tooltip).toContainText(/Current setup .*380\.00/);
+  await expect(tooltip).toContainText(/If followed .*342\.00/);
+  await expect(tooltip).toContainText(/Monthly savings .*38\.00/);
+  await noOverflow(page);
+  if (process.env.DASHBOARD_GROUPS_QA_DIR) {
+    await comparison.screenshot({ path: path.join(process.env.DASHBOARD_GROUPS_QA_DIR, `monthly-${viewport.width}.png`) });
+  }
   await search.fill('CRM platform');
   await expect(results).toContainText('1 matching recommendation');
   await expect(results).toContainText('2 supporting resources');
@@ -467,7 +494,21 @@ async function verifyRecommendationSummary(browser, viewport) {
   await expect(summary).toContainText(/6[’']600\.00/);
   await page.getByRole('button', { name: /CRM platform.*Reduce unused seats at renewal/ }).click();
   await expect(page.getByRole('cell', { name: explanation })).toBeVisible();
+  const estimated = results.getByRole('region', { name: 'Estimated spending impact' });
+  await expect(estimated).toContainText('Includes savings subject to review');
+  await expect(estimated).toContainText('550.00 / month');
+  await expect(estimated).toContainText(/6[’']600\.00 annualized savings/);
+  await expect(estimated).toContainText('27 seats');
+  await expect(estimated).toContainText('17 seats');
+  await expect(estimated).toContainText(/1[’']485\.00/);
+  await expect(estimated).toContainText('935.00');
+  await expect(estimated).toContainText('1 Nov 2026 notice deadline had passed');
+  await expect(estimated.getByRole('img')).toHaveCount(0);
+  await expect(estimated.getByRole('table')).toHaveCount(0);
   await noOverflow(page);
+  if (process.env.DASHBOARD_GROUPS_QA_DIR) {
+    await estimated.screenshot({ path: path.join(process.env.DASHBOARD_GROUPS_QA_DIR, `impact-${viewport.width}.png`) });
+  }
   await page.getByLabel('Resource type').selectOption('shutdown');
   await expect(results).toContainText('0 matching recommendations');
   await expect(summary).toContainText('Unavailable');
@@ -477,26 +518,31 @@ async function verifyRecommendationSummary(browser, viewport) {
   await expect(results.getByRole('columnheader', { name: 'Platform / recommended action' })).toBeAttached();
   await page.getByRole('radio', { name: /^high$/i }).check();
   await expect(results.getByRole('table', { name: 'Recommendations for underused resources' })).toBeVisible();
+  await page.unrouteAll({ behavior: 'wait' });
   await page.close();
 }
 
 async function verifyUnavailable(browser) {
   const page = await browser.newPage();
   const current = '**/api/v1/runs/current';
-  await page.route(current, route => route.fulfill({
+  let currentUnavailable = true;
+  let breakdownUnavailable = true;
+  await page.route(current, route => currentUnavailable ? route.fulfill({
     status: 503,
     json: { detail: { message: 'A validated Gold run is unavailable.' } },
-  }), { times: 1 });
-  await page.route(/\/api\/v1\/runs\/[^/]+\/breakdowns\?/, route => route.fulfill({
+  }) : route.continue());
+  await page.route(/\/api\/v1\/runs\/[^/]+\/breakdowns\?/, route => breakdownUnavailable ? route.fulfill({
     status: 503,
     json: { detail: { message: 'Breakdown unavailable.' } },
-  }), { times: 1 });
+  }) : route.continue());
   await page.goto(url + '/dashboard');
   await expect(page.getByRole('alert')).toContainText('A validated Gold run is unavailable.');
+  currentUnavailable = false;
   await page.getByRole('button', { name: 'Retry published data' }).click();
   const trend = page.getByRole('region', { name: 'Monthly footprint' });
   await expect(trend.getByRole('alert')).toContainText('Breakdown unavailable.');
   await expect(page.getByRole('region', { name: 'Utilization analysis' })).toBeVisible();
+  breakdownUnavailable = false;
   await trend.getByRole('button', { name: 'Retry monthly data' }).click();
   await expect(trend.getByRole('img', { name: /Monthly Spending for the company/ })).toBeVisible();
   await page.close();
@@ -506,6 +552,11 @@ async function verifyUnavailable(browser) {
   const browser = await chromium.launch({ headless: true });
   try {
     for (const viewport of [{ width: 1568, height: 1003 }, { width: 390, height: 844 }]) {
+      if (process.argv.includes('--voice-only')) {
+        await verifyConversation(browser, url, viewport);
+        console.log(`Hands-free Dashboard chat passed at ${viewport.width} × ${viewport.height}.`);
+        continue;
+      }
       if (process.argv.includes('--chat-only')) {
         await verifyDashboard(browser, viewport, true);
         console.log(`Dashboard chat passed at ${viewport.width} × ${viewport.height}.`);
@@ -517,9 +568,18 @@ async function verifyUnavailable(browser) {
       await verifyDashboard(browser, viewport);
       console.log(`Dashboard passed at ${viewport.width} × ${viewport.height}.`);
     }
-    if (!process.argv.includes('--chat-only') && !process.argv.includes('--recommendations-only')) {
+    if (process.argv.includes('--voice-only')) {
+      await verifyRecovery(browser, url);
+      console.log('Dashboard voice recovery and cleanup passed.');
+    } else if (!process.argv.includes('--chat-only') && !process.argv.includes('--recommendations-only')) {
       await verifyUnavailable(browser);
       console.log('Dashboard availability and retry checks passed.');
+      for (const viewport of [{ width: 1568, height: 1003 }, { width: 390, height: 844 }]) {
+        await verifyConversation(browser, url, viewport);
+        console.log(`Hands-free Dashboard chat passed at ${viewport.width} × ${viewport.height}.`);
+      }
+      await verifyRecovery(browser, url);
+      console.log('Dashboard voice recovery and cleanup passed.');
     }
   } finally {
     await browser.close();

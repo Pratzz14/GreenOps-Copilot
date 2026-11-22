@@ -9,10 +9,11 @@ async function getGold<T>(path: string, signal: AbortSignal): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export function useGold<T>(path: string, enabled = true) {
+export function useGold<T>(path: string, enabled = true, refetchInterval?: number) {
   return useQuery({
     queryKey: ['gold', path],
     queryFn: ({ signal }) => getGold<T>(path, signal),
     enabled,
+    refetchInterval,
   });
 }

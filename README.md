@@ -320,6 +320,13 @@ an API key.
 **Ask GreenOps** uses the same key with the OpenAI Responses API and defaults to
 `gpt-5.4`. Set `OPENAI_DASHBOARD_MODEL` to override the Dashboard chat model.
 
+Open the floating **Ask GreenOps** chat and select **Start voice** to speak and
+hear answers. Use localhost or HTTPS for microphone access. The backend reads
+`ELEVENLABS_API_KEY` and the optional `ELEVENLABS_VOICE_ID` from its environment
+or project `.env`. It defaults to the George stock voice and uses
+`OPENAI_API_KEY` for per-operation speech fallback. Typed replies play through
+their **Listen** button.
+
 ## Build and verify Gold
 
 After publishing Silver, build the Gold run for the case decision date.
