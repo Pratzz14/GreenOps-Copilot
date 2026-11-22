@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.analysis import Runtime, router as analysis_router
+from backend.dashboard_chat import router as dashboard_chat_router
 from backend.routes import router
 from backend.quality import router as quality_router, load_quality
 from backend.services import load_health
@@ -34,6 +35,7 @@ def create_app(outputs: Path = ROOT / "outputs", dist: Path = ROOT / "frontend" 
     app.include_router(quality_router)
     app.include_router(silver_router)
     app.include_router(analysis_router)
+    app.include_router(dashboard_chat_router)
 
     # Guard the API namespace before the frontend; typos must never return HTML.
     @app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"], include_in_schema=False)

@@ -23,10 +23,10 @@ class Draft(BaseModel):
     explanation: str = Field(max_length=1500)
 
 
-def settings():
+def settings(model_variable="OPENAI_ANALYSIS_MODEL", default_model="gpt-4.1-mini"):
     local = dotenv_values(ENV_FILE, interpolate=False)
     key = os.environ.get("OPENAI_API_KEY") or local.get("OPENAI_API_KEY") or ""
-    model = os.environ.get("OPENAI_ANALYSIS_MODEL") or local.get("OPENAI_ANALYSIS_MODEL") or "gpt-4.1-mini"
+    model = os.environ.get(model_variable) or local.get(model_variable) or default_model
     return key.strip(), model.strip()
 
 

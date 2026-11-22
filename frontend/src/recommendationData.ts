@@ -6,6 +6,11 @@ export type RecommendationGroup = GoldModels['RecommendationGroup'];
 export const fields = { cost: 'net_chf', energy: 'savings_kwh', carbon: 'savings_location_kg' } as const;
 export const labels = { cost: 'Net cost', energy: 'Energy', carbon: 'Location-based emissions' };
 export const statuses = { eligible: 'Eligible', human_review: 'Needs review', blocked: 'Blocked' };
+export const recommendationActions = {
+  schedule: 'Review cluster pauses',
+  shutdown: 'Review server downsizing or pauses',
+  resize: 'Reduce unused seats at renewal',
+};
 
 export function spending(value: string | number) {
   return chfFormat.format(Number(value));

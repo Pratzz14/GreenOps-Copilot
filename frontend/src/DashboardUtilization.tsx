@@ -125,17 +125,17 @@ export default function DashboardUtilization({ run, filters, unit, onMetric, ...
   const scan = query.isError ? undefined : query.data;
   const matches = scan?.items.filter(row => `${row.resource} ${row.category}`.toLowerCase().includes(searchTerm)) ?? [];
 
-  return <section className="dashboard-panel dashboard-utilization" aria-labelledby="dashboard-utilization">
-    <div className="dashboard-utilization-header">
+  return <section className="dashboard-panel dashboard-data-panel dashboard-utilization" aria-labelledby="dashboard-utilization">
+    <div className="dashboard-data-header">
       <div><h2 id="dashboard-utilization">Utilization analysis</h2>
         <p>{filters.driver || 'All drivers'} · {filters.period ? `${filters.period.length} months selected` : 'Baseline period'}</p>
-        {scan && <p className="dashboard-utilization-count">{matches.length} matches · {scan.assessed} assessed · {scan.insufficient} with insufficient observations</p>}
+        {scan && <p>{matches.length} matches · {scan.assessed} assessed · {scan.insufficient} with insufficient observations</p>}
       </div>
       <label className="dashboard-utilization-search">Find a resource
         <input type="search" value={search} onChange={event => setSearch(event.target.value)} />
       </label>
     </div>
-    {emptyPeriod ? <p>Select at least one month to view utilization.</p> :
+    {emptyPeriod ? <p className="dashboard-table-message">Select at least one month to view utilization.</p> :
     <DashboardRequest query={query} label="utilization analysis">{data =>
       <Results key={JSON.stringify([params.toString(), searchTerm])}
         scan={data} matches={matches} metric={filters.metric} unit={unit} onMetric={onMetric} {...links} />}

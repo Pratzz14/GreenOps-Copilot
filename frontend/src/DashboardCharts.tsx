@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import DashboardRequest from './DashboardRequest';
@@ -88,26 +88,41 @@ function MetricCells({ row, unit }: { row: Breakdown; unit: CarbonUnit }) {
   });
 }
 
-function Drivers({ rows, filters, unit, selectDriver }: {
+function Drivers({ rows, filters, unit, evidence, selectDriver }: {
   rows: Breakdown[];
   filters: DashboardFilters;
   unit: CarbonUnit;
+  evidence?: string[];
   selectDriver: (driver: string) => void;
 }) {
   const { driver, group, metric, period, scenario } = filters;
   const filterKey = JSON.stringify([scenario, group, metric, period]);
-  const [pagination, setPagination] = useState({ filterKey, page: 0 });
-  if (pagination.filterKey !== filterKey) setPagination({ filterKey, page: 0 });
   const sorted = periodBreakdown(rows, period)
     .map(row => ({ row, value: rowValue(row, metric) }))
     .sort((a, b) => (b.value ?? -Infinity) - (a.value ?? -Infinity) || a.row.driver.localeCompare(b.row.driver));
-  const page = Math.min(pagination.page, Math.max(0, Math.ceil(sorted.length / dashboardPageSize) - 1));
+  const target = sorted.findIndex(({ row, value }) => value !== null && evidence?.includes(row.driver));
+  const [pagination, setPagination] = useState({ filterKey, evidence, page: 0 });
+  const pageChanged = pagination.filterKey !== filterKey || pagination.evidence !== evidence;
+  const requestedPage = pageChanged || (evidence && pagination.page === -1)
+    ? Math.floor(Math.max(0, target) / dashboardPageSize) : pagination.page;
+  if (pageChanged) setPagination({ filterKey, evidence, page: evidence ? -1 : 0 });
+  const page = Math.min(requestedPage, Math.max(0, Math.ceil(sorted.length / dashboardPageSize) - 1));
   const start = page * dashboardPageSize;
   const visible = sorted.slice(start, start + dashboardPageSize);
   const ranked = visible.flatMap(({ row, value }) => value === null ? [] : [{ row, value }]);
   const max = Math.max(0, ...sorted.map(entry => entry.value ?? 0));
   const min = Math.min(0, ...sorted.map(entry => entry.value ?? 0));
   const scale = max - min || 1;
+  const evidenceButton = useRef<HTMLButtonElement>(null);
+  const focusedEvidence = useRef<string[]>(undefined);
+  useEffect(() => {
+    const button = evidenceButton.current;
+    if (evidence && button && focusedEvidence.current !== evidence) {
+      focusedEvidence.current = evidence;
+      button.focus({ preventScroll: true });
+      button.scrollIntoView({ block: 'center' });
+    }
+  }, [evidence, target, page]);
 
   return <>
     {ranked.length ? (
@@ -115,7 +130,9 @@ function Drivers({ rows, filters, unit, selectDriver }: {
         {ranked.map(({ row, value }) => {
           const partial = rowCoverage(row, metric) === 'partial';
           return <li key={row.driver}>
-            <button type="button" aria-pressed={driver === row.driver} onClick={() => selectDriver(row.driver)}>
+            <button type="button" aria-pressed={driver === row.driver} onClick={() => selectDriver(row.driver)}
+              data-chat-evidence={evidence?.includes(row.driver) || undefined}
+              ref={sorted[target]?.row.driver === row.driver ? evidenceButton : undefined}>
               <span className="dashboard-bar-name">{row.driver}{partial && <span className="dashboard-coverage-dot" title="Partial coverage" />}</span>
               <span className="dashboard-bar-track" aria-hidden="true">
                 <span style={{ left: `${(Math.min(0, value) - min) / scale * 100}%`, width: `${Math.abs(value) / scale * 100}%` }} />
@@ -128,7 +145,7 @@ function Drivers({ rows, filters, unit, selectDriver }: {
     ) : <p className="dashboard-request">{page ? 'No published driver values on this page.' :
       'No published driver values for this selection.'}</p>}
     <DashboardPagination page={page} total={sorted.length} label="Driver pages"
-      onPage={next => setPagination({ filterKey, page: next })} />
+      onPage={next => setPagination({ filterKey, evidence, page: next })} />
     <details className="dashboard-disclosure">
       <summary>View breakdown</summary>
       {!sorted.length ? <p>No records for this period.</p> :
@@ -151,11 +168,12 @@ function Drivers({ rows, filters, unit, selectDriver }: {
   </>;
 }
 
-export default function DashboardCharts({ query, months, filters, unit, onDriver }: {
+export default function DashboardCharts({ query, months, filters, unit, driverEvidence, onDriver }: {
   query: UseQueryResult<Breakdown[], Error>;
   months: string[];
   filters: DashboardFilters;
   unit: CarbonUnit;
+  driverEvidence?: string[];
   onDriver: (driver: string) => void;
 }) {
   const selected = filters.period ?? months;
@@ -177,7 +195,8 @@ export default function DashboardCharts({ query, months, filters, unit, onDriver
       <h2 id="dashboard-drivers">Biggest drivers</h2>
       <p className="dashboard-chart-meta">{metricUnit(filters.metric, unit)} · {periodLabel}</p>
       <DashboardRequest query={query} label="driver data">
-        {rows => <Drivers rows={rows} filters={filters} unit={unit} selectDriver={name => onDriver(name === filters.driver ? '' : name)} />}
+        {rows => <Drivers rows={rows} filters={filters} unit={unit} evidence={driverEvidence}
+          selectDriver={name => onDriver(name === filters.driver ? '' : name)} />}
       </DashboardRequest>
     </section>
   </>;

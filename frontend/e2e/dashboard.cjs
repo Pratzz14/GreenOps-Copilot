@@ -16,7 +16,7 @@ const noOverflow = async page => {
   assert.equal(overflow, null, `Dashboard overflows the viewport: ${JSON.stringify(overflow)}`);
 };
 
-async function verifyDashboard(browser, viewport) {
+async function verifyDashboard(browser, viewport, chatOnly = false) {
   const page = await browser.newPage({ viewport });
   const errors = [];
   const requests = [];
@@ -26,6 +26,7 @@ async function verifyDashboard(browser, viewport) {
     if (['error', 'warning'].includes(message.type())) errors.push(message.text());
   });
 
+  await page.route('**/api/v1/dashboard/chat/status', route => route.fulfill({ json: { configured: true } }));
   await page.goto(url);
   await expect(page).toHaveURL(url + '/dashboard');
   await expect(page).toHaveTitle(/GreenOps/);
@@ -39,6 +40,90 @@ async function verifyDashboard(browser, viewport) {
   const trend = page.getByRole('region', { name: 'Monthly footprint' });
   const utilization = page.getByRole('region', { name: 'Utilization analysis' });
   const currentRun = await (await page.request.get(url + '/api/v1/runs/current')).json();
+  const driverRow = drivers.locator('.dashboard-bars button').first();
+  await expect(driverRow).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Calculations and downloads' })).toHaveCount(0);
+  const driverName = await driverRow.locator('.dashboard-bar-name').innerText();
+
+  let chatRequests = 0;
+  await page.route('**/api/v1/dashboard/chat', async route => {
+    chatRequests += 1;
+    const input = route.request().postDataJSON();
+    assert.equal(input.run_id, currentRun.run_id);
+    assert.equal(input.filters.scenario, 'mid');
+    assert.equal(input.history.length, chatRequests - 1);
+    if (chatRequests === 1) assert.equal(input.question, 'Which tools cost the most?');
+    if (chatRequests === 2) assert.deepEqual(input.history[0].scopes, ['Baseline']);
+    await route.fulfill({ json: {
+      answer: chatRequests === 1 ? 'Here is the published spending.' : 'Here is the weekly utilization.',
+      verified_only: chatRequests === 2,
+      sources: [chatRequests === 1 ? {
+        layer: 'Gold', dataset: 'summary', scope: 'Baseline', url: '/data-explorer',
+        ranking_scope: { scenario: 'mid', group: 'tool', metric: 'cost', driver: '', months: null },
+        rows: [{ label: driverName, recorded_cost_chf: 40, imputed_cost_chf: 2 }],
+      } : { layer: 'Silver', dataset: 'summary', scope: 'Baseline', url: '/data-explorer', rows: [{ value: 42 }] }],
+    } });
+  });
+  const launch = page.getByRole('button', { name: 'Ask GreenOps', exact: true });
+  const chat = page.getByRole('complementary', { name: 'Ask GreenOps' });
+  await expect(launch).toHaveAttribute('aria-expanded', 'false');
+  await expect(chat).toBeHidden();
+  const dashboardBox = await filters.boundingBox();
+  const chartBox = await drivers.boundingBox();
+  const launchBox = await launch.boundingBox();
+  const inset = viewport.width <= 600 ? 12 : 20;
+  assert.equal(launchBox.x + launchBox.width, viewport.width - inset);
+  assert.equal(launchBox.y + launchBox.height, viewport.height - inset);
+  await launch.click();
+  await expect(chat).toBeVisible();
+  await expect(chat.getByRole('button', { name: 'Close chat' })).toBeFocused();
+  assert.deepEqual(await filters.boundingBox(), dashboardBox);
+  assert.deepEqual(await drivers.boundingBox(), chartBox);
+  const chatBox = await chat.boundingBox();
+  assert.equal(chatBox.x + chatBox.width, launchBox.x + launchBox.width);
+  assert.ok(chatBox.y + chatBox.height <= launchBox.y + 5);
+  await expect(chat.getByText(/Dashboard scope.*All months.*Spending by tool/)).toBeVisible();
+  await chat.getByRole('button', { name: 'Which tools cost the most?' }).click();
+  await expect(page.getByText(/Here is the published spending/)).toBeVisible();
+  await expect(chat.getByText('CHF 42', { exact: true })).toBeVisible();
+  await page.getByText('Gold · summary · Baseline').click();
+  await expect(page.getByRole('cell', { name: '40', exact: true })).toBeVisible();
+  await page.getByLabel('Your question').fill('How about weekly utilization?');
+  await page.keyboard.press('Escape');
+  await expect(chat).toBeHidden();
+  await expect(launch).toBeFocused();
+  await launch.click();
+  await expect(page.getByLabel('Your question')).toHaveValue('How about weekly utilization?');
+  await page.getByLabel('Your question').press('End');
+  await page.getByLabel('Your question').press('Shift+Enter');
+  await expect(page.getByLabel('Your question')).toHaveValue('How about weekly utilization?\n');
+  await page.getByLabel('Your question').press('Enter');
+  await expect(page.getByText(/Here is the weekly utilization/)).toBeVisible();
+  await expect(page.getByRole('cell', { name: '42', exact: true })).toBeVisible();
+  if (viewport.width <= 600) {
+    await page.setViewportSize({ width: viewport.width, height: 360 });
+    await expect(chat.getByRole('button', { name: 'Send', exact: true })).toBeInViewport();
+    await page.setViewportSize(viewport);
+  }
+  await noOverflow(page);
+  await page.getByRole('button', { name: 'Show in Biggest drivers' }).click();
+  await expect(chat).toBeHidden();
+  await expect(driverRow).toHaveAttribute('data-chat-evidence', 'true');
+  await expect(driverRow).toBeFocused();
+  await launch.click();
+  await page.getByRole('button', { name: 'Clear chat' }).click();
+  await expect(page.getByRole('log')).toBeEmpty();
+  await expect(chat.getByRole('button', { name: 'Which tools cost the most?' })).toBeVisible();
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.getByRole('button', { name: 'Close chat' }).click();
+  await expect(chat).toBeHidden();
+  await expect(filters).toBeVisible();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  if (chatOnly) {
+    assert.deepEqual(errors, []);
+    await page.close();
+    return;
+  }
   const recommendationUrl = url + `/api/v1/runs/${currentRun.run_id}/recommendations`;
   const response = await page.request.get(recommendationUrl);
   assert.ok(response.ok(), 'Recommendations API should return the published catalog');
@@ -330,19 +415,6 @@ async function verifyDashboard(browser, viewport) {
   await expect(evidence).toBeHidden();
   await search.fill('nonexistent-resource');
   await expect(utilization).toContainText('No resources match your search.');
-  const files = [
-    ['Draft baseline CSV', 'parameter,must_or_bonus,value_low,value_mid,value_high,unit,source,calculation_or_assumption'],
-    ['Provisional submission measures CSV', 'measure_id,description,resource_or_source,change,effort_person_days'],
-    ['Conditional draft measures CSV', 'measure_id,description,resource_or_source,change,effort_person_days'],
-  ];
-  for (const [name, header] of files) {
-    const download = page.waitForEvent('download');
-    const link = page.getByRole('link', { name, exact: true });
-    await link.click();
-    assert.match((await download).suggestedFilename(), /^(draft-conditional-)?template_/);
-    const response = await page.request.get(url + await link.getAttribute('href'));
-    assert.ok((await response.text()).replace(/^\uFEFF/, '').startsWith(header));
-  }
   await noOverflow(page);
   await page.reload();
   await expect(baseline).toContainText('18.13 t CO₂e');
@@ -372,23 +444,39 @@ async function verifyRecommendationSummary(browser, viewport) {
   });
   await page.goto(url + '/recommendations');
   const summary = page.getByRole('region', { name: 'Overall summary' });
+  const results = page.getByRole('region', { name: 'Recommended actions' });
   const search = page.getByRole('searchbox', { name: 'Find a recommendation' });
   await expect(summary).toBeVisible();
+  await expect(summary.getByRole('article')).toHaveCount(3);
+  await expect(summary.getByText(/eligible|conditional|partial coverage|show breakdown/i)).toHaveCount(0);
+  const pages = results.getByRole('group', { name: 'Recommendation pages' });
+  await expect(results.locator('tr.dashboard-recommendation')).toHaveCount(15);
+  await expect(pages).toContainText('1–15 of');
+  await pages.getByRole('button', { name: 'Next' }).click();
+  await expect(pages).toContainText('16–');
   await search.fill('dr-failover');
-  await page.getByRole('button', { name: /Review server downsizing or pauses.*dr-failover/ }).click();
+  await page.getByRole('button', { name: /dr-failover.*Review server downsizing or pauses/ }).click();
   await expect(page.getByRole('cell', { name: 'The named disaster recovery server must remain running.' })).toBeVisible();
   await search.fill('CRM platform');
-  await expect(summary).toContainText('Matching recommendations1');
-  await expect(summary).toContainText('Supporting resources2');
+  await expect(results).toContainText('1 matching recommendation');
+  await expect(results).toContainText('2 supporting resources');
   await expect(summary).toContainText(/6[’']600\.00/);
+  const filters = results.getByRole('button', { name: 'Filters' });
+  if (await filters.isVisible()) await filters.click();
   await page.getByLabel('Savings shown').selectOption('energy');
   await expect(summary).toContainText(/6[’']600\.00/);
-  await page.getByRole('button', { name: /Reduce unused seats at renewal.*CRM platform/ }).click();
+  await page.getByRole('button', { name: /CRM platform.*Reduce unused seats at renewal/ }).click();
   await expect(page.getByRole('cell', { name: explanation })).toBeVisible();
   await noOverflow(page);
   await page.getByLabel('Resource type').selectOption('shutdown');
-  await expect(summary).toContainText('Matching recommendations0');
+  await expect(results).toContainText('0 matching recommendations');
   await expect(summary).toContainText('Unavailable');
+  await results.getByRole('button', { name: 'Clear filters' }).click();
+  await expect(pages).toContainText('1–15 of');
+  await page.getByLabel('Group by').selectOption('platform');
+  await expect(results.getByRole('columnheader', { name: 'Platform / recommended action' })).toBeAttached();
+  await page.getByRole('radio', { name: /^high$/i }).check();
+  await expect(results.getByRole('table', { name: 'Recommendations for underused resources' })).toBeVisible();
   await page.close();
 }
 
@@ -418,13 +506,21 @@ async function verifyUnavailable(browser) {
   const browser = await chromium.launch({ headless: true });
   try {
     for (const viewport of [{ width: 1568, height: 1003 }, { width: 390, height: 844 }]) {
+      if (process.argv.includes('--chat-only')) {
+        await verifyDashboard(browser, viewport, true);
+        console.log(`Dashboard chat passed at ${viewport.width} × ${viewport.height}.`);
+        continue;
+      }
       await verifyRecommendationSummary(browser, viewport);
       console.log(`Recommendations passed at ${viewport.width} × ${viewport.height}.`);
+      if (process.argv.includes('--recommendations-only')) continue;
       await verifyDashboard(browser, viewport);
       console.log(`Dashboard passed at ${viewport.width} × ${viewport.height}.`);
     }
-    await verifyUnavailable(browser);
-    console.log('Dashboard availability and retry checks passed.');
+    if (!process.argv.includes('--chat-only') && !process.argv.includes('--recommendations-only')) {
+      await verifyUnavailable(browser);
+      console.log('Dashboard availability and retry checks passed.');
+    }
   } finally {
     await browser.close();
   }

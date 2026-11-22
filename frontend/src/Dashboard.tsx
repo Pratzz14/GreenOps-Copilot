@@ -6,6 +6,7 @@ import DashboardUtilization from './DashboardUtilization';
 import DashboardRecommendations from './DashboardRecommendations';
 import type { RecommendationGroup } from './recommendationData';
 import DashboardRequest from './DashboardRequest';
+import DashboardChat from './DashboardChat';
 import { CalculationFactors, Evidence } from './GoldEvidence';
 import {
   baselineMonths, coverageLabels, emissionsUnit, dashboardDefaults, groupLabels, metricLabels, metricValue, monthLabel, number,
@@ -16,7 +17,6 @@ import './dashboard.css';
 
 type Run = GoldModels['GoldRun'];
 type Overview = GoldModels['GoldOverview'];
-type Package = GoldModels['GoldPackage'];
 
 function PeriodPicker({ months, period, onChange }: {
   months: string[];
@@ -91,7 +91,7 @@ function Footprint({ overview, run }: { overview: Overview; run: Run }) {
       overview.cost_coverage],
   ] as const;
   return <dl className="dashboard-kpis">
-      {metrics.map(([metric, label, value, coverage]) => <div key={metric}>
+      {metrics.map(([metric, label, value, coverage]) => <div key={metric} data-metric={metric}>
         <dt>
           <span>{label}</span>
           <DashboardInfo label={label}>
@@ -121,62 +121,49 @@ function Footprint({ overview, run }: { overview: Overview; run: Run }) {
   </dl>;
 }
 
-function FactorDetails({ run, label = 'Calculation factors' }: { run: string; label?: string }) {
-  const [open, setOpen] = useState(false);
-  return <details className="dashboard-disclosure gold-evidence" onToggle={event => setOpen(event.currentTarget.open)}>
-    <summary>{label}</summary>
-    {open && <CalculationFactors run={run} />}
-  </details>;
-}
-
-function Resources({ run, result }: { run: Run; result: Package | undefined }) {
-  const draft = result?.selection_status === 'provisional' || result?.selection_status === 'pending';
-  const path = `/api/v1/submissions/${run.run_id}`;
-  return <section className="dashboard-resources" aria-label="Calculations and downloads">
-    <FactorDetails run={run.run_id} />
-    <div className="dashboard-exports">
-      {result && <>
-        <a href={`${path}/baseline.csv`}>{draft ? 'Draft baseline CSV' : 'Baseline CSV'}</a>
-        <a href={`${path}/measures.csv`}>{draft ? 'Provisional submission measures CSV' : 'Submission measures CSV'}</a>
-        {run.conditional_package_id &&
-          <a href={`/api/v1/packages/${run.conditional_package_id}/exports/measures.csv`}>Conditional draft measures CSV</a>}
-        <small>CSV exports use mid assumptions and the annual run rate.</small>
-      </>}
-    </div>
-  </section>;
-}
-
 function PublishedDashboard({ run }: { run: Run }) {
   const [filters, setFilters] = useState(dashboardDefaults);
+  const [driverEvidence, setDriverEvidence] = useState<string[]>();
   const [selection, setSelection] = useState<{ id: string; click: number } | null>(null);
   const { scenario, group } = filters;
   const months = baselineMonths(run.period_start, run.period_end);
   const prefix = `/runs/${run.run_id}`;
   const overview = useGold<Overview>(`${prefix}/overview?scenario=${scenario}`);
   const breakdown = useGold<Breakdown[]>(`${prefix}/breakdowns?group=${group}&scenario=${scenario}`);
-  const automatic = useGold<Package>(`/packages/${run.package_id}`);
   const params = new URLSearchParams({ scenario, group, driver: filters.driver });
   filters.period?.forEach(month => params.append('months', month.slice(0, 7)));
   const emptyPeriod = filters.period?.length === 0;
   const recommendations = useGold<RecommendationGroup[]>(`${prefix}/recommendation-groups?${params}`, !emptyPeriod);
   const recommendationLinks = new Map(recommendations.data?.flatMap(row => row.members.map(member => [member.finding_key, member.id])));
 
+  function updateFilters(next: DashboardFilters) {
+    setDriverEvidence(undefined);
+    setFilters(next);
+  }
+
   return <>
-    <Filters filters={filters} months={months} update={setFilters} />
+    <Filters filters={filters} months={months} update={updateFilters} />
     <section className="dashboard-panel dashboard-footprint" aria-label="Company-wide baseline footprint">
       <DashboardRequest query={overview} label="baseline footprint">{data => <Footprint run={run} overview={data} />}</DashboardRequest>
     </section>
     <div className="dashboard-charts">
       <DashboardCharts query={breakdown} months={months} filters={filters} unit={emissionsUnit(overview.data)}
-        onDriver={driver => setFilters(current => ({ ...current, driver }))} />
+        driverEvidence={driverEvidence} onDriver={driver => updateFilters({ ...filters, driver })} />
     </div>
     <DashboardUtilization run={run.run_id} filters={filters} unit={emissionsUnit(overview.data)}
       recommendationLinks={recommendationLinks} onRecommendation={id =>
         setSelection(previous => ({ id, click: (previous?.click ?? 0) + 1 }))}
-      onMetric={metric => setFilters(current => ({ ...current, metric }))} />
+      onMetric={metric => updateFilters({ ...filters, metric })} />
     <DashboardRecommendations query={recommendations} run={run.run_id} basis={overview.data?.emissions.unit ?? 'CO2'}
       metric={filters.metric} group={group} emptyPeriod={emptyPeriod} selection={selection} filterKey={params.toString()} />
-    <Resources run={run} result={automatic.data} />
+    <DashboardChat run={run.run_id} filters={filters} onShowDrivers={(scope, labels) => {
+      if (scope.group === 'subject') return;
+      setFilters({
+        scenario: scope.scenario, group: scope.group, metric: scope.metric, driver: scope.driver ?? '',
+        period: scope.months?.map(month => month + '-01') ?? null,
+      });
+      setDriverEvidence(labels);
+    }} />
   </>;
 }
 

@@ -317,6 +317,9 @@ overrides the file. Set `OPENAI_ANALYSIS_MODEL` to override the default
 `gpt-4.1-mini`. The direct SQL editor and Visual builder are available without
 an API key.
 
+**Ask GreenOps** uses the same key with the OpenAI Responses API and defaults to
+`gpt-5.4`. Set `OPENAI_DASHBOARD_MODEL` to override the Dashboard chat model.
+
 ## Build and verify Gold
 
 After publishing Silver, build the Gold run for the case decision date.

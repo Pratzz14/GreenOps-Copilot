@@ -6,15 +6,10 @@ import DashboardPagination from './DashboardPagination';
 import { Evidence } from './GoldEvidence';
 import { carbonUnit, groupLabels, metricValue, monthLabel, dateLabel, sumAvailable, type GoldModels, type Group, type Metric } from './dashboardData';
 import {
-  displaySavings, fields, groupSavings, labels, memberSavings, spending, statuses, type Recommendation, type RecommendationGroup,
+  displaySavings, fields, groupSavings, labels, memberSavings, recommendationActions, spending, statuses, type Recommendation, type RecommendationGroup,
 } from './recommendationData';
 
 const recommendationPageSize = 5;
-const actions = {
-  schedule: 'Review cluster pauses',
-  shutdown: 'Review server downsizing or pauses',
-  resize: 'Reduce unused seats at renewal',
-};
 const reasons: Record<string, string> = {
   dependency: 'Review dependencies', schedule: 'Review the operating schedule', contract: 'Review contract terms',
   estimate_coverage: 'Verify incomplete savings estimates', rule_eligibility: 'Consistent with the published safety rules',
@@ -124,8 +119,9 @@ function Savings({ row, basis, metric, month }: { row: RecommendationGroup; basi
   </>;
 }
 
-export function RecommendationRow({ row, run, basis, metric, selected, month }: {
+export function RecommendationRow({ row, run, basis, metric, selected, month, scopeFirst = false }: {
   row: RecommendationGroup; run: string; basis: string; metric: Metric; selected: string | null; month: string;
+  scopeFirst?: boolean;
 }) {
   const [open, setOpen] = useState(row.members.some(member => member.id === selected));
   const detailsId = useId();
@@ -145,7 +141,8 @@ export function RecommendationRow({ row, run, basis, metric, selected, month }: 
         <svg aria-hidden="true" viewBox="0 0 16 16" width="16" height="16">
           <path d={open ? 'M3 6l5 5 5-5' : 'M6 3l5 5-5 5'} fill="none" stroke="currentColor" strokeWidth="1.5" />
         </svg>
-        <span><strong>{actions[row.action]}</strong><small>{row.scope}</small></span>
+        <span><strong>{scopeFirst ? row.scope : recommendationActions[row.action]}</strong>
+          <small>{scopeFirst ? recommendationActions[row.action] : row.scope}</small></span>
       </button></th>
       <td>{row.members.length} {scopeLabel}{row.members.length === 1 ? '' : 's'}
         {seats !== null && <small>{seats} unused seats</small>}
@@ -209,8 +206,7 @@ function Results({ rows, run, basis, metric, selected, monthly }: {
   )));
   const offset = page * recommendationPageSize;
   return <>
-    <p className="dashboard-recommendation-count">{rows.length ? `${rows.length} recommendations · ${rows.reduce((count, row) => count + row.members.length, 0)} supporting scopes`
-      : 'No recurring issues match the dashboard filters.'}</p>
+    {!rows.length && <p className="dashboard-table-message">No recurring issues match the dashboard filters.</p>}
     {rows.length > 0 && <table className="dashboard-recommendations-table" aria-label="Grouped recommendations">
       <thead><tr><th scope="col">Recommended action</th><th scope="col">Affected scope</th>
         <th scope="col" aria-sort="descending">{month ? 'Potential monthly savings' : 'Potential annual savings'}
@@ -228,16 +224,22 @@ export default function DashboardRecommendations({ query, run, basis, metric, gr
 }) {
   const [monthlySpending, setMonthlySpending] = useState(true);
   const monthly = metric === 'cost' && monthlySpending;
-  return <section id="dashboard-recommendations" className="dashboard-panel dashboard-recommendations"
+  const rows = !emptyPeriod && !query.isError ? query.data : undefined;
+  return <section id="dashboard-recommendations" className="dashboard-panel dashboard-data-panel dashboard-recommendations"
     aria-labelledby="recommendations-heading" tabIndex={-1}>
-    <h2 id="recommendations-heading">Recommendations</h2>
-    <p>Grouped by {groupLabels[group].toLowerCase()}</p>
-    {metric === 'cost' && !emptyPeriod && <label className="dashboard-recommendation-period">Spending horizon
-      <select value={monthlySpending ? 'month' : 'year'} onChange={event => setMonthlySpending(event.target.value === 'month')}>
-        <option value="month">Monthly</option><option value="year">Annual</option>
-      </select>
-    </label>}
-    {emptyPeriod ? <p>Select at least one month to view recommendations.</p> :
+    <header className="dashboard-data-header">
+      <div>
+        <h2 id="recommendations-heading">Recommendations</h2>
+        <p>Grouped by {groupLabels[group].toLowerCase()}</p>
+        {!!rows?.length && <p>{rows.length} recommendations · {rows.reduce((count, row) => count + row.members.length, 0)} supporting scopes</p>}
+      </div>
+      {metric === 'cost' && !emptyPeriod && <label className="dashboard-recommendation-period">Spending horizon
+        <select value={monthlySpending ? 'month' : 'year'} onChange={event => setMonthlySpending(event.target.value === 'month')}>
+          <option value="month">Monthly</option><option value="year">Annual</option>
+        </select>
+      </label>}
+    </header>
+    {emptyPeriod ? <p className="dashboard-table-message">Select at least one month to view recommendations.</p> :
       <DashboardRequest query={query} label="recommendations">{rows =>
         <Results key={JSON.stringify([filterKey, metric, selection, monthly])}
           rows={rows} run={run} basis={basis} metric={metric} selected={selection?.id ?? null} monthly={monthly} />

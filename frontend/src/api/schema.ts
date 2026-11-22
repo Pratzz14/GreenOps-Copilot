@@ -327,6 +327,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/submissions/{run_id}/{filename}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Submission Export */
+        get: operations["submission_export_api_v1_submissions__run_id___filename__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/data-quality": {
         parameters: {
             query?: never;
@@ -652,6 +669,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dashboard/chat/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Status */
+        get: operations["status_api_v1_dashboard_chat_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/dashboard/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Chat */
+        post: operations["chat_api_v1_dashboard_chat_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -731,6 +782,21 @@ export interface components {
              * @default
              */
             y: string;
+        };
+        /** ChatRequest */
+        ChatRequest: {
+            /** Run Id */
+            run_id: string;
+            /** Question */
+            question: string;
+            filters: components["schemas"]["Filters"];
+            /** History */
+            history?: components["schemas"]["Exchange"][];
+        };
+        /** ChatStatus */
+        ChatStatus: {
+            /** Configured */
+            configured: boolean;
         };
         /** ColumnProfile */
         ColumnProfile: {
@@ -938,6 +1004,15 @@ export interface components {
             /** Items */
             items: components["schemas"]["EvidenceItem"][];
         };
+        /** Exchange */
+        Exchange: {
+            /** Question */
+            question: string;
+            /** Answer */
+            answer: string;
+            /** Scopes */
+            scopes?: string[];
+        };
         /** Filter */
         Filter: {
             /** Field */
@@ -949,6 +1024,31 @@ export interface components {
             op: "eq" | "in" | "contains" | "lt" | "lte" | "gt" | "gte" | "range" | "null" | "not_null";
             /** Values */
             values?: string[];
+        };
+        /** Filters */
+        Filters: {
+            /**
+             * Scenario
+             * @enum {string}
+             */
+            scenario: "low" | "mid" | "high";
+            /** Months */
+            months?: string[] | null;
+            /**
+             * Group
+             * @enum {string}
+             */
+            group: "department" | "tool" | "provider" | "location" | "subject" | "platform";
+            /**
+             * Driver
+             * @default
+             */
+            driver: string;
+            /**
+             * Metric
+             * @enum {string}
+             */
+            metric: "cost" | "energy" | "carbon";
         };
         /** Gap */
         Gap: {
@@ -1875,6 +1975,18 @@ export interface components {
             /** Quantified */
             quantified: number;
         };
+        /** Reply */
+        Reply: {
+            /** Answer */
+            answer: string;
+            /** Sources */
+            sources?: components["schemas"]["Source"][];
+            /**
+             * Verified Only
+             * @default false
+             */
+            verified_only: boolean;
+        };
         /** ResultMetadata */
         ResultMetadata: {
             /** Id */
@@ -2024,6 +2136,32 @@ export interface components {
             recorded_cost_chf: string;
             /** Coverage Status */
             coverage_status: string;
+        };
+        /** Source */
+        Source: {
+            /**
+             * Layer
+             * @enum {string}
+             */
+            layer: "Gold" | "Silver";
+            /** Dataset */
+            dataset: string;
+            /** Url */
+            url: string;
+            /** Evidence Id */
+            evidence_id?: string | null;
+            /** Scope */
+            scope: string;
+            /** Rows */
+            rows: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
+            ranking_scope?: components["schemas"]["Filters"] | null;
         };
         /** SourceDetail */
         SourceDetail: {
@@ -3164,6 +3302,54 @@ export interface operations {
             };
         };
     };
+    submission_export_api_v1_submissions__run_id___filename__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+                filename: "baseline.csv" | "measures.csv";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unknown Gold result */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Gold publication is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     overview_api_v1_data_quality_get: {
         parameters: {
             query?: {
@@ -3849,6 +4035,59 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    status_api_v1_dashboard_chat_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatStatus"];
+                };
+            };
+        };
+    };
+    chat_api_v1_dashboard_chat_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Reply"];
+                };
             };
             /** @description Validation Error */
             422: {

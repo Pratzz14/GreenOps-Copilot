@@ -48,7 +48,7 @@ export default function App() {
 
   return (
     <>
-      <header className="app-header">
+      <header className={recommendations ? 'app-header recommendations-masthead' : 'app-header'}>
         <a className="brand" href="/dashboard"><span className="brand-mark" aria-hidden="true">G</span>GreenOps Copilot</a>
         <nav className="workspace-navigation" aria-label="Main navigation">
           <a href="/data-explorer" aria-current={workspace || dashboard || recommendations ? undefined : "page"}>Data Explorer</a>
